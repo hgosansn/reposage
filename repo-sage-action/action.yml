@@ -1,0 +1,19 @@
+name: "RepoSage"
+description: "A bot that analyzes a repository and suggests improvements based on AI and RAG."
+author: "Your Name"
+inputs:
+  github_token:
+    description: "GitHub Token"
+    required: true
+  open_router_api_key:
+    description: "Open Router API Key"
+    required: true
+  repo:
+    description: "Repository to analyze"
+    required: true
+runs:
+  using: "python"
+  main: "bot.py"
+branding:
+  icon: "robot"
+  color: "blue"
