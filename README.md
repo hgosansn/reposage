@@ -1,5 +1,7 @@
 # RepoSage
 
+![Logo](resources/reposage.png)
+
 RepoSage leverages AI and Retrieval-Augmented Generation (RAG) to implement features/fix bugs and makes changes on a repository.
 
 
