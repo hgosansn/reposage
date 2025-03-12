@@ -46,4 +46,12 @@ Removed deprecated functions. Added soon-to-be deprecated functions.
 Made the code more maintainable by adding more comments that lie.
 Please work. Please." | sort -R | head -n 1)
 
+echo "---"
+
 git commit -am "$message"
+
+echo "Bumping the version..."
+
+git push -u origin main --tags
+
+echo "Done."
