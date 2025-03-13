@@ -76,6 +76,7 @@ class TestRepoSage(unittest.TestCase):
 
     def test_initialization(self):
         """Test that RepoSage initializes correctly."""
+        # Test without description
         bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
         
         # Verify GitHub client was initialized
@@ -88,6 +89,27 @@ class TestRepoSage(unittest.TestCase):
         self.assertEqual(bot.openrouter_api_key, 'fake_openrouter_api_key')
         self.assertEqual(bot.model, 'google/gemma-3-27b-it:free')
         self.assertEqual(bot.base_branch, 'main')
+        self.assertIsNone(bot.description)
+        
+        # Reset mock
+        self.mock_github.reset_mock()
+        
+        # Test with description
+        description = "Focus on performance improvements"
+        bot_with_desc = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, 
+                                self.model, self.base_branch, description)
+        
+        # Verify GitHub client was initialized again
+        self.mock_github.assert_called_once_with('fake_github_token')
+        self.mock_github.return_value.get_repo.assert_called_once_with('user/repo')
+        
+        # Verify attributes were set correctly including description
+        self.assertEqual(bot_with_desc.github_token, 'fake_github_token')
+        self.assertEqual(bot_with_desc.repo_name, 'user/repo')
+        self.assertEqual(bot_with_desc.openrouter_api_key, 'fake_openrouter_api_key')
+        self.assertEqual(bot_with_desc.model, 'google/gemma-3-27b-it:free')
+        self.assertEqual(bot_with_desc.base_branch, 'main')
+        self.assertEqual(bot_with_desc.description, description)
 
     def test_fetch_repo_files(self):
         """Test fetching repository files."""
@@ -134,6 +156,32 @@ class TestRepoSage(unittest.TestCase):
         self.assertEqual(result['file_path'], 'test.py')
         self.assertIn('analysis', result)
         self.assertIn('suggested_changes', result['analysis'])
+        
+        # Reset mock
+        self.mock_requests.reset_mock()
+        
+        # Test with description
+        description = "Focus on performance improvements"
+        bot_with_desc = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, 
+                               self.model, self.base_branch, description)
+        result_with_desc = bot_with_desc.analyze_file(mock_file)
+        
+        # Verify API was called correctly with description
+        self.mock_requests.post.assert_called_once()
+        call_args = self.mock_requests.post.call_args
+        self.assertEqual(call_args[0][0], "https://openrouter.ai/api/v1/chat/completions")
+        
+        # Check if the description was included in the prompt
+        request_json = call_args[1]['json']
+        # The description should be in the user message (index 1), not the system message (index 0)
+        prompt_content = request_json['messages'][1]['content']
+        self.assertIn(description, prompt_content)
+        
+        # Verify result structure
+        self.assertIsNotNone(result_with_desc)
+        self.assertEqual(result_with_desc['file_path'], 'test.py')
+        self.assertIn('analysis', result_with_desc)
+        self.assertIn('suggested_changes', result_with_desc['analysis'])
 
     def test_implement_changes(self):
         """Test implementing suggested changes."""
@@ -279,11 +327,31 @@ class TestRepoSage(unittest.TestCase):
         mock_pr.html_url = 'https://github.com/user/repo/pull/1'
         mock_create_pr.return_value = mock_pr
         
-        # Create bot and run
+        # Test 1: Run without description
         bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
         bot.run()
         
         # Verify all steps were called
+        mock_fetch.assert_called_once()
+        mock_analyze.assert_called_once_with(mock_file)
+        mock_implement.assert_called_once_with(mock_analysis)
+        mock_commit.assert_called_once_with(mock_changes)
+        mock_create_pr.assert_called_once()
+        
+        # Reset mocks for second test
+        mock_fetch.reset_mock()
+        mock_analyze.reset_mock()
+        mock_implement.reset_mock()
+        mock_commit.reset_mock()
+        mock_create_pr.reset_mock()
+        
+        # Test 2: Run with description
+        description = "Focus on performance improvements"
+        bot_with_desc = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, 
+                                self.model, self.base_branch, description)
+        bot_with_desc.run()
+        
+        # Verify all steps were called again
         mock_fetch.assert_called_once()
         mock_analyze.assert_called_once_with(mock_file)
         mock_implement.assert_called_once_with(mock_analysis)

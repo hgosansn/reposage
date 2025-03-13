@@ -6,6 +6,20 @@ on:
       - main
   schedule:
     - cron: '0 0 * * *'  # Runs daily at midnight
+  # Add manual trigger with input parameters
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'AI model to use for analysis (default: qwen/qwq-32b:free)'
+        required: false
+        default: 'qwen/qwq-32b:free'
+      base_branch:
+        description: 'Base branch to use for analysis (default: main)'
+        required: false
+        default: 'main'
+      description:
+        description: 'Optional description of what you want RepoSage to focus on'
+        required: false
 
 jobs:
   analyze:
@@ -25,3 +39,6 @@ jobs:
           github_token: ${{ secrets.REPOSAGE_GITHUB_TOKEN }}
           open_router_api_key: ${{ secrets.OPEN_ROUTER_API_KEY }}
           repo: ${{ github.repository }}
+          model: ${{ github.event.inputs.model || 'qwen/qwq-32b:free' }}
+          base_branch: ${{ github.event.inputs.base_branch || 'main' }}
+          description: ${{ github.event.inputs.description || '' }}

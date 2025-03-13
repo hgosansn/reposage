@@ -23,15 +23,16 @@ SUPPORTED_FILE_EXTENSIONS = ('.py', '.js', '.java', '.ts', '.jsx', '.tsx', '.htm
 IGNORED_DIRECTORIES = ('node_modules', 'venv', '.git', '__pycache__', 'dist', 'build')
 MAX_FILE_SIZE = 100 * 1024  # 100 KB
 MAX_TOKENS = 4096
-DEFAULT_MODEL = "google/gemma-3-27b-it:free"
+DEFAULT_MODEL = "qwen/qwq-32b:free"
 
 class RepoSage:
-    def __init__(self, github_token, repo_name, openrouter_api_key, model=DEFAULT_MODEL, base_branch='main'):
+    def __init__(self, github_token, repo_name, openrouter_api_key, model=DEFAULT_MODEL, base_branch='main', description=None):
         self.github_token = github_token
         self.repo_name = repo_name
         self.openrouter_api_key = openrouter_api_key
         self.model = model
         self.base_branch = base_branch
+        self.description = description
 
         # log the first 5 characters of the github token
         logger.info(f"Initialized RepoSage for repository: {self.repo_name} with github token: {self.github_token[:5]}******")
@@ -72,6 +73,9 @@ class RepoSage:
                 # Filter by file extension and size
                 if path.endswith(SUPPORTED_FILE_EXTENSIONS) and file_content.size <= MAX_FILE_SIZE:
                     files.append(file_content)
+                elif file_content.size > MAX_FILE_SIZE:
+                    logger.info(f"Skipping file {path} due to size limit")
+
         
         logger.info(f"Found {len(files)} relevant files for analysis")
         return files
@@ -104,6 +108,8 @@ File content:
 ```{file_ext}
 {sanitized_content}
 ```
+
+{f'Focus on the following aspects: {self.description}' if self.description else ''}
 
 Provide your analysis in the following JSON format:
 {{
@@ -385,6 +391,7 @@ def main():
         parser.add_argument('--open-router-api-key', '-o', dest='openrouter_api_key', required=True, help='OpenRouter API key')
         parser.add_argument('--model', '-m', default=DEFAULT_MODEL, help=f'Model to use for analysis (default: {DEFAULT_MODEL})')
         parser.add_argument('--base-branch', '-b', default='main', help='Base branch to use for analysis (default: main)')
+        parser.add_argument('--description', '-d', help='Optional description of what you want RepoSage to focus on')
         
         # Parse arguments
         args = parser.parse_args()
@@ -395,7 +402,8 @@ def main():
             repo_name=args.repo_name,
             openrouter_api_key=args.openrouter_api_key,
             model=args.model,
-            base_branch=args.base_branch
+            base_branch=args.base_branch,
+            description=args.description
         )
         
         # Run the bot

@@ -11,6 +11,17 @@ inputs:
   repo:
     description: "Repository to analyze (defaults to current repository)"
     required: false
+  model:
+    description: "AI model to use for analysis (default: qwen/qwq-32b:free)"
+    required: false
+    default: "qwen/qwq-32b:free"
+  base_branch:
+    description: "Base branch to use for analysis (default: main)"
+    required: false
+    default: "main"
+  description:
+    description: "Optional description of what you want RepoSage to focus on"
+    required: false
 runs:
   using: "composite"
   steps:
@@ -22,7 +33,13 @@ runs:
       shell: bash
       run: |
         pip install -r repo-sage-action/requirements.txt
-        python repo-sage-action/bot.py --github-token ${{ inputs.github_token }} --open-router-api-key ${{ inputs.open_router_api_key }} --repo ${{ inputs.repo }}
+        python repo-sage-action/bot.py \
+          --github-token ${{ inputs.github_token }} \
+          --open-router-api-key ${{ inputs.open_router_api_key }} \
+          --repo ${{ inputs.repo }} \
+          --model ${{ inputs.model }} \
+          --base-branch ${{ inputs.base_branch }} \
+          ${{ inputs.description != '' && format('--description "{0}"', inputs.description) || '' }}
 branding:
   icon: "robot"
   color: "blue"
