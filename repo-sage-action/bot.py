@@ -332,13 +332,13 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
 
 def main():
     try:
-		github_token = sys.argv[1]
-		repo_name = sys.argv[2]
-		openrouter_api_key = sys.argv[3]
-		model = sys.argv[4]
-		base_branch = sys.argv[5]
+        github_token = sys.argv[1]
+        repo_name = sys.argv[2]
+        openrouter_api_key = sys.argv[3]
+        model = sys.argv[4]
+        base_branch = sys.argv[5]
 
-		bot = RepoSage(github_token, repo_name, openrouter_api_key, model, base_branch)
+        bot = RepoSage(github_token, repo_name, openrouter_api_key, model, base_branch)
         bot.run()
     except Exception as e:
         logger.error(f"RepoSage failed: {str(e)}")
