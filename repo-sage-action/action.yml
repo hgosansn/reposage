@@ -17,11 +17,10 @@ runs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: "3.8"
+        python-version: "3.10"
     - name: Run RepoSage
-      shell: bash
       run: |
-        pip install -r repo-sage-action/requirements.txt
+        pip install -r repo-sage-action/requirements.txt --cache-dir ${{ github.workspace }}/.pip_cache
         python repo-sage-action/bot.py --github-token ${{ inputs.github_token }} --open-router-api-key ${{ inputs.open_router_api_key }} --repo ${{ inputs.repo }}
 branding:
   icon: "robot"
