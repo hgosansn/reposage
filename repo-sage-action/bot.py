@@ -21,13 +21,13 @@ SUPPORTED_FILE_EXTENSIONS = ('.py', '.js', '.java', '.ts', '.jsx', '.tsx', '.htm
 IGNORED_DIRECTORIES = ('node_modules', 'venv', '.git', '__pycache__', 'dist', 'build')
 MAX_FILE_SIZE = 100 * 1024  # 100 KB
 MAX_TOKENS = 4096
-DEFAULT_MODEL = "anthropic/claude-3-opus:beta"
+DEFAULT_MODEL = "google/gemma-3-27b-it:free"
 
 class RepoSage:
     def __init__(self):
         # Read inputs from the GitHub Action or environment variables
         self.github_token = os.environ.get('INPUT_GITHUB_TOKEN') or os.environ.get('GITHUB_TOKEN')
-        self.repo_name = os.environ.get('INPUT_REPO') or os.environ.get('GITHUB_REPOSITORY')
+        self.repo_name = os.environ.get('INPUT_REPO', os.environ['GITHUB_REPOSITORY'])
         self.openrouter_api_key = os.environ.get('INPUT_OPEN_ROUTER_API_KEY') or os.environ.get('OPENROUTER_API_KEY')
         self.model = os.environ.get('INPUT_MODEL') or DEFAULT_MODEL
         self.base_branch = os.environ.get('INPUT_BASE_BRANCH') or 'main'

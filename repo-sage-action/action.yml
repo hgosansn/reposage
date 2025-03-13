@@ -9,11 +9,14 @@ inputs:
     description: "Open Router API Key"
     required: true
   repo:
-    description: "Repository to analyze"
-    required: true
+    description: "Repository to analyze (defaults to current repository)"
+    required: false
 runs:
-  using: "python"
-  main: "bot.py"
+  using: "docker"
+  image: "python:3.8-slim"
+  args:
+    - "python"
+    - "/repo-sage-action/bot.py"
 branding:
   icon: "robot"
   color: "blue"
