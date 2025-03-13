@@ -3,6 +3,7 @@ import sys
 import yaml
 import base64
 import re
+import argparse
 from github import Github
 import requests
 import json
@@ -333,17 +334,34 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
 
 def main():
     try:
-        github_token = sys.argv[1]
-        repo_name = sys.argv[2]
-        openrouter_api_key = sys.argv[3]
-        model = sys.argv[4]
-        base_branch = sys.argv[5]
-
-        bot = RepoSage(github_token, repo_name, openrouter_api_key, model, base_branch)
+        # Create argument parser
+        parser = argparse.ArgumentParser(description='RepoSage - AI-powered code improvement tool')
+        
+        # Add arguments with both short and long form options
+        parser.add_argument('--github-token', '-g', required=True, help='GitHub token for repository access')
+        parser.add_argument('--repo', '-r', dest='repo_name', required=True, help='Repository name in format owner/repo')
+        parser.add_argument('--open-router-api-key', '-o', dest='openrouter_api_key', required=True, help='OpenRouter API key')
+        parser.add_argument('--model', '-m', default=DEFAULT_MODEL, help=f'Model to use for analysis (default: {DEFAULT_MODEL})')
+        parser.add_argument('--base-branch', '-b', default='main', help='Base branch to use for analysis (default: main)')
+        
+        # Parse arguments
+        args = parser.parse_args()
+        
+        # Initialize RepoSage with parsed arguments
+        bot = RepoSage(
+            github_token=args.github_token,
+            repo_name=args.repo_name,
+            openrouter_api_key=args.openrouter_api_key,
+            model=args.model,
+            base_branch=args.base_branch
+        )
+        
+        # Run the bot
         bot.run()
     except Exception as e:
         logger.error(f"RepoSage failed: {str(e)}")
         print(f"\n❌ Error: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
