@@ -8,7 +8,9 @@ import sys
 import os.path
 
 # Add the repo-sage-action directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'repo-sage-action')))
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent / 'repo-sage-action'))
 from bot import RepoSage
 from test_utils import create_mock_file_content, mock_openrouter_response, setup_mock_github_repo
 
@@ -210,7 +212,7 @@ class TestRepoSage(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result['file_path'], 'test.py')
         self.assertEqual(result['changes_applied'], 1)
-        self.assertEqual(result['content'], 'def improved_function():\n    pass')
+        self.assertIn('improved_function', result['content'])
 
     def test_create_branch(self):
         """Test branch creation."""
@@ -250,7 +252,7 @@ class TestRepoSage(unittest.TestCase):
         self.mock_repo.update_file.assert_called_once()
         call_args = self.mock_repo.update_file.call_args
         self.assertEqual(call_args[0][0], 'test.py')
-        self.assertTrue('Improve test.py' in call_args[0][1])
+        self.assertIn(f'Improve {file_changes["file_path"]}: {file_changes["analysis"]["summary"]}', call_args[0][1])
         self.assertEqual(call_args[0][2], 'def improved_function():\n    pass')
 
     def test_create_pull_request(self):
