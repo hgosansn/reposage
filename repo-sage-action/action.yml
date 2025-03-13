@@ -39,7 +39,7 @@ runs:
           --repo ${{ inputs.repo }} \
           --model ${{ inputs.model }} \
           --base-branch ${{ inputs.base_branch }} \
-          ${{ inputs.description != '' && format('--description "{0}"', inputs.description) || '' }}
+          ${{ inputs.description == '' ? '' : format('"{0}"', inputs.description) | quote }}
 branding:
   icon: "robot"
   color: "blue"
