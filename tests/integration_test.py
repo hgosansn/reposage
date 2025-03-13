@@ -48,8 +48,8 @@ class IntegrationTestRepoSage(unittest.TestCase):
     @classmethod
     def _run_git_command(cls, command, cwd):
         """Run a git command in the specified directory."""
-        subprocess.run(command, shell=True, cwd=cwd, check=True, 
-                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(command, cwd=cwd, check=True, 
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
     
     @classmethod
     def _create_test_files(cls):
