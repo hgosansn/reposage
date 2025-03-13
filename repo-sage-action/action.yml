@@ -18,8 +18,8 @@ runs:
       uses: actions/setup-python@v2
       with:
         python-version: "3.8"
-
     - name: Run RepoSage
+      shell: bash
       run: |
         pip install -r reposage/requirements.txt
         python ./bot.py --github-token ${{ inputs.github_token }} --open-router-api-key ${{ inputs.open_router_api_key }} --repo ${{ inputs.repo }}
