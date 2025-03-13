@@ -15,56 +15,54 @@ from test_utils import create_mock_file_content, mock_openrouter_response, setup
 class TestRepoSage(unittest.TestCase):
     """Test suite for the RepoSage bot."""
 
+    import unittest
+from unittest.mock import patch, MagicMock, mock_open
+import json
+
+class TestRepoSage(unittest.TestCase):
+
     def setUp(self):
-        """Set up test environment before each test."""
-        # Set test parameters
         self.github_token = 'fake_github_token'
         self.repo_name = 'user/repo'
         self.openrouter_api_key = 'fake_openrouter_api_key'
         self.model = 'google/gemma-3-27b-it:free'
         self.base_branch = 'main'
-        
-        # Create patches
-        self.github_patch = patch('bot.Github')
-        self.requests_patch = patch('bot.requests')
-        
-        # Start patches
-        self.mock_github = self.github_patch.start()
-        self.mock_requests = self.requests_patch.start()
-        
-        # Set up mock GitHub repository
-        self.mock_repo = MagicMock()
-        self.mock_github.return_value.get_repo.return_value = self.mock_repo
-        
-        # Set up mock branch
-        self.mock_branch = MagicMock()
-        self.mock_branch.commit.sha = 'fake_commit_sha'
-        self.mock_repo.get_branch.return_value = self.mock_branch
-        
-        # Set up mock response for OpenRouter API
-        self.mock_response = MagicMock()
-        self.mock_response.status_code = 200
-        self.mock_response.json.return_value = {
-            'choices': [{
-                'message': {
-                    'content': json.dumps({
-                        'analysis': {
-                            'code_quality': 'Good code quality',
-                            'best_practices': 'Follows best practices',
-                            'potential_bugs': 'No potential bugs found',
-                            'performance': 'Good performance'
-                        },
-                        'suggested_changes': [{
-                            'original_code': 'def old_function():',
-                            'improved_code': 'def improved_function():',
-                            'explanation': 'Better function name'
-                        }],
-                        'summary': 'Improved function naming'
-                    })
-                }
-            }]
-        }
-        self.mock_requests.post.return_value = self.mock_response
+
+    def _setup_mocks(self):
+        with patch('bot.Github') as mock_github, patch('bot.requests') as mock_requests:
+            mock_repo = MagicMock()
+            mock_github.return_value.get_repo.return_value = mock_repo
+            mock_branch = MagicMock()
+            mock_branch.commit.sha = 'fake_commit_sha'
+            mock_repo.get_branch.return_value = mock_branch
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                'choices': [{
+                    'message': {
+                        'content': json.dumps({
+                            'analysis': {
+                                'code_quality': 'Good code quality',
+                                'best_practices': 'Follows best practices',
+                                'potential_bugs': 'No potential bugs found',
+                                'performance': 'Good performance'
+                            },
+                            'suggested_changes': [{
+                                'original_code': 'def old_function():',
+                                'improved_code': 'def improved_function():',
+                                'explanation': 'Better function name'
+                            }],
+                            'summary': 'Improved function naming'
+                        })
+                    }
+                }]
+            }
+            mock_requests.post.return_value = mock_response
+            return mock_github, mock_requests, mock_repo
+
+    def tearDown(self):
+        pass  # Patches are handled by 'with' statement now
+
 
     def tearDown(self):
         """Clean up after each test."""
