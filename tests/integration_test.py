@@ -91,17 +91,17 @@ This is a test repository for RepoSage integration tests.
     
     def setUp(self):
         """Set up test environment before each test."""
-        # Set required environment variables
-        os.environ['GITHUB_TOKEN'] = 'fake_github_token'
-        os.environ['GITHUB_REPOSITORY'] = 'user/repo'
-        os.environ['OPENROUTER_API_KEY'] = 'fake_openrouter_api_key'
+        # Set test parameters
+        self.github_token = 'fake_github_token'
+        self.repo_name = 'user/repo'
+        self.openrouter_api_key = 'fake_openrouter_api_key'
+        self.model = 'google/gemma-3-27b-it:free'
+        self.base_branch = 'main'
     
     def tearDown(self):
         """Clean up after each test."""
-        # Clear environment variables
-        os.environ.pop('GITHUB_TOKEN', None)
-        os.environ.pop('GITHUB_REPOSITORY', None)
-        os.environ.pop('OPENROUTER_API_KEY', None)
+        # No need to clear environment variables anymore
+        pass
     
     def _mock_openrouter_response(self, file_path):
         """Create a mock response for the OpenRouter API based on file path."""
@@ -232,7 +232,7 @@ This is a test repository for RepoSage integration tests.
         mock_repo.get_contents.side_effect = mock_get_contents
         
         # Run the bot
-        bot = RepoSage()
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
         bot.run()
         
         # Verify API calls - should be 3 calls (one for each file)
@@ -265,7 +265,7 @@ This is a test repository for RepoSage integration tests.
         })
         
         # Create a bot instance
-        bot = RepoSage()
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
         
         # Call the API
         response = bot.call_openrouter_api("Test prompt")
