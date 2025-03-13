@@ -15,15 +15,16 @@ inputs:
     description: "AI model to use for analysis (default: google/gemma-3-27b-it:free)"
     required: false
   base_branch:
-    description: "Base branch to use for analysis (default: main)"
+    description: "Base branch to use for analysis (default: derived from repository's default branch)"
     required: false
+    default: ${{ github.repository }}
   description:
     description: "Optional description of what you want RepoSage to focus on"
     required: false
   dry_run:
     description: "Generate changes but do not create PRs"
     required: false
-    default: 'false'
+    default: false
   output_file:
     description: "Save changes to a JSON file for later review"
     required: false
@@ -31,14 +32,14 @@ inputs:
   max_workers:
     description: "Maximum number of parallel workers for file analysis (default: auto-determine based on CPU count)"
     required: false
-    default: '0'
+    default: 0
 runs:
   using: "composite"
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
-        python-version: "3.8"
+        python-version: "3.12"
     - name: Run RepoSage
       shell: bash
       run: |
