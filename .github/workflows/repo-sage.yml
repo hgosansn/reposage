@@ -22,6 +22,6 @@ jobs:
       - name: Run RepoSage
         uses: ./repo-sage-action
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.REPOSAGE_GITHUB_TOKEN }}
           open_router_api_key: ${{ secrets.OPEN_ROUTER_API_KEY }}
           repo: ${{ github.repository }}
