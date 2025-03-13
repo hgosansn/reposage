@@ -1,5 +1,5 @@
 name: "RepoSage"
-description: "A bot that analyzes a repository and suggests improvements based on AI and RAG."
+description: "An AI-driven bot that analyzes a repository and suggests improvements based on AI and RAG."
 author: "Your Name"
 inputs:
   github_token:
@@ -12,16 +12,26 @@ inputs:
     description: "Repository to analyze (defaults to current repository)"
     required: false
   model:
-    description: "AI model to use for analysis (default: qwen/qwq-32b:free)"
+    description: "AI model to use for analysis (default: google/gemma-3-27b-it:free)"
     required: false
-    default: "qwen/qwq-32b:free"
   base_branch:
     description: "Base branch to use for analysis (default: main)"
     required: false
-    default: "main"
   description:
     description: "Optional description of what you want RepoSage to focus on"
     required: false
+  dry_run:
+    description: "Generate changes but do not create PRs"
+    required: false
+    default: 'false'
+  output_file:
+    description: "Save changes to a JSON file for later review"
+    required: false
+    default: ''
+  max_workers:
+    description: "Maximum number of parallel workers for file analysis (default: auto-determine based on CPU count)"
+    required: false
+    default: '0'
 runs:
   using: "composite"
   steps:
@@ -39,7 +49,10 @@ runs:
           --repo ${{ inputs.repo }} \
           --model ${{ inputs.model }} \
           --base-branch ${{ inputs.base_branch }} \
-          ${{ inputs.description != '' && format('--description "{0}"', inputs.description) || '' }}
+          ${{ inputs.description != '' && format('--description "{0}"', inputs.description) || '' }} \
+          ${{ inputs.dry_run == 'true' && '--dry-run' || '' }} \
+          ${{ inputs.output_file != '' && format('--output-file "{0}"', inputs.output_file) || '' }} \
+          ${{ inputs.max_workers != '0' && format('--max-workers {0}', inputs.max_workers) || '' }}
 branding:
   icon: "robot"
   color: "blue"

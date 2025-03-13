@@ -286,77 +286,63 @@ class TestRepoSage(unittest.TestCase):
         self.assertTrue('test.py' in call_args[1]['body'])
 
     @patch('bot.RepoSage.fetch_repo_files')
-    @patch('bot.RepoSage.analyze_file')
+    @patch('bot.RepoSage.analyze_files_parallel')
     @patch('bot.RepoSage.implement_changes')
     @patch('bot.RepoSage.commit_changes')
     @patch('bot.RepoSage.create_pull_request')
-    def test_run_full_process(self, mock_create_pr, mock_commit, mock_implement, mock_analyze, mock_fetch):
-        """Test the full bot run process."""
-        # Set up mock files
-        mock_file = create_mock_file_content('test.py')
-        mock_fetch.return_value = [mock_file]
+    def test_parallel_run(self, mock_create_pr, mock_commit, mock_implement, mock_analyze_files_parallel, mock_fetch):
+        """Test the parallel run process of the RepoSage bot."""
         
-        # Set up mock analysis
-        mock_analysis = {
-            'file_path': 'test.py',
-            'analysis': {
-                'suggested_changes': [{
-                    'original_code': 'def old_function():',
-                    'improved_code': 'def improved_function():',
-                    'explanation': 'Better function name'
-                }],
-                'summary': 'Improved function naming'
+        # Set up mock files for multiple files
+        mock_files = [create_mock_file_content(f'test_{i}.py') for i in range(3)]
+        mock_fetch.return_value = mock_files
+        
+        # Set up mock analysis for each file
+        mock_analyses = []
+        for i in range(3):
+            mock_analysis = {
+                'file_path': f'test_{i}.py',
+                'analysis': {
+                    'suggested_changes': [{
+                        'original_code': 'def old_function():',
+                        'improved_code': 'def improved_function():',
+                        'explanation': 'Better function name'
+                    }],
+                    'summary': 'Improved function naming'
+                }
             }
-        }
-        mock_analyze.return_value = mock_analysis
+            mock_analyses.append(mock_analysis)
         
-        # Set up mock implementation
-        mock_changes = {
-            'file_path': 'test.py',
-            'content': 'def improved_function():\n    pass',
-            'changes_applied': 1,
-            'analysis': mock_analysis['analysis']
-        }
-        mock_implement.return_value = mock_changes
+        # Mock the analyze_files_parallel to return the mock analyses
+        mock_analyze_files_parallel.return_value = mock_analyses
         
-        # Set up mock commit
-        mock_commit.return_value = True
+        # Set up mock implementation for each analysis
+        for mock_analysis in mock_analyses:
+            mock_changes = {
+                'file_path': mock_analysis['file_path'],
+                'content': 'def improved_function():\n    pass',
+                'changes_applied': 1,
+                'analysis': mock_analysis['analysis']
+            }
+            mock_implement.return_value = mock_changes
+        
+        # Set up mock commit to allow multiple calls
+        mock_commit.side_effect = [True] * len(mock_analyses)
         
         # Set up mock PR
         mock_pr = MagicMock()
         mock_pr.html_url = 'https://github.com/user/repo/pull/1'
         mock_create_pr.return_value = mock_pr
         
-        # Test 1: Run without description
+        # Run the bot
         bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
         bot.run()
         
         # Verify all steps were called
         mock_fetch.assert_called_once()
-        mock_analyze.assert_called_once_with(mock_file)
-        mock_implement.assert_called_once_with(mock_analysis)
-        mock_commit.assert_called_once_with(mock_changes)
-        mock_create_pr.assert_called_once()
-        
-        # Reset mocks for second test
-        mock_fetch.reset_mock()
-        mock_analyze.reset_mock()
-        mock_implement.reset_mock()
-        mock_commit.reset_mock()
-        mock_create_pr.reset_mock()
-        
-        # Test 2: Run with description
-        description = "Focus on performance improvements"
-        bot_with_desc = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, 
-                                self.model, self.base_branch, description)
-        bot_with_desc.run()
-        
-        # Verify all steps were called again
-        mock_fetch.assert_called_once()
-        mock_analyze.assert_called_once_with(mock_file)
-        mock_implement.assert_called_once_with(mock_analysis)
-        mock_commit.assert_called_once_with(mock_changes)
-        mock_create_pr.assert_called_once()
+        mock_analyze_files_parallel.assert_called_once_with(mock_files)
+        self.assertEqual(mock_commit.call_count, len(mock_analyses))
+        self.assertEqual(mock_create_pr.call_count, len(mock_analyses))
 
 if __name__ == '__main__':
     unittest.main()

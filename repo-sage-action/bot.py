@@ -10,6 +10,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 import logging
+import concurrent.futures
+from typing import List, Dict, Any, Optional
+import tempfile
 
 # Configure logging
 logging.basicConfig(
@@ -255,9 +258,16 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
             
             if changes_applied > 0 and new_content != current_content:
                 logger.info(f"Applied {changes_applied} changes to {file_path}")
+                # Commit the changes after applying them
+                self.commit_changes({
+                    'file_path': file_path,
+                    'content': new_content,
+                    'analysis': analysis
+                })
                 return {
                     'file_path': file_path,
                     'content': new_content,
+                    'original_content': current_content,  # Store original content for diff generation
                     'changes_applied': changes_applied,
                     'analysis': analysis
                 }
@@ -345,38 +355,187 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
             logger.error(f"Error creating pull request: {str(e)}")
             return None
 
-    def run(self):
-        """Run the RepoSage analysis and improvement process."""
+    def analyze_files_parallel(self, files, max_workers=None):
+        """Analyze files in parallel using a thread pool.
+        
+        Args:
+            files: List of file contents to analyze
+            max_workers: Maximum number of worker threads (None = auto-determine based on CPU count)
+            
+        Returns:
+            List of file analysis results
+        """
+        logger.info(f"Starting parallel analysis of {len(files)} files...")
+        results = []
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all file analysis tasks
+            future_to_file = {executor.submit(self.analyze_file, file_content): file_content for file_content in files}
+            
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_file):
+                file_content = future_to_file[future]
+                try:
+                    result = future.result()
+                    if result:
+                        results.append(result)
+                        logger.info(f"Completed analysis of {result['file_path']}")
+                    else:
+                        logger.warning(f"Analysis failed for {file_content.path}")
+                except Exception as e:
+                    logger.error(f"Exception analyzing {file_content.path}: {str(e)}")
+        
+        logger.info(f"Parallel analysis complete. {len(results)} files analyzed successfully.")
+        return results
+
+    def create_individual_pull_requests(self, changes_list):
+        """Create individual pull requests for each file change.
+        
+        Args:
+            changes_list: List of file changes to commit
+            
+        Returns:
+            List of created pull request URLs
+        """
+        pr_urls = []
+        
+        for file_changes in changes_list:
+            try:
+                file_path = file_changes['file_path']
+                # Create a unique branch for this file
+                file_branch = f"{self.branch_name}-{Path(file_path).stem}"
+                
+                # Create branch from base
+                source = self.repo.get_branch(self.base_branch)
+                self.repo.create_git_ref(ref=f"refs/heads/{file_branch}", sha=source.commit.sha)
+                logger.info(f"Created branch for individual file: {file_branch}")
+                
+                # Commit changes to this branch
+                file = self.repo.get_contents(file_path, ref=file_branch)
+                commit_message = f"Improve {file_path}: {file_changes['analysis'].get('summary', 'Code improvements')}"[:100]
+                
+                self.repo.update_file(
+                    file.path,
+                    commit_message,
+                    file_changes['content'],
+                    file.sha,
+                    branch=file_branch
+                )
+                
+                # Create PR for this file
+                pr_title = f"RepoSage: Improve {file_path}"
+                
+                pr_body = "# 🧙 RepoSage: AI-Suggested Code Improvements\n\n"
+                pr_body += f"This pull request contains improvements for `{file_path}`.\n\n"
+                
+                # Add details about the changes
+                analysis = file_changes['analysis']
+                pr_body += f"## 📄 {file_path}\n\n"
+                pr_body += f"### Summary\n{analysis.get('summary', 'Code improvements')}\n\n"
+                
+                if 'suggested_changes' in analysis:
+                    pr_body += "### Changes\n\n"
+                    for idx, suggestion in enumerate(analysis['suggested_changes'], 1):
+                        if 'explanation' in suggestion:
+                            pr_body += f"**Change {idx}**: {suggestion['explanation']}\n\n"
+                
+                # Create the PR
+                pr = self.repo.create_pull(
+                    title=pr_title,
+                    body=pr_body,
+                    head=file_branch,
+                    base=self.base_branch
+                )
+                
+                logger.info(f"Created individual PR for {file_path}: {pr.html_url}")
+                pr_urls.append(pr.html_url)
+                
+            except Exception as e:
+                logger.error(f"Error creating PR for {file_changes['file_path']}: {str(e)}")
+        
+        return pr_urls
+
+    def save_changes_to_file(self, changes_list, output_file):
+        """Save changes to a JSON file for later review.
+        
+        Args:
+            changes_list: List of file changes
+            output_file: Path to output JSON file
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Create a serializable version of the changes
+            serializable_changes = []
+            for change in changes_list:
+                # Create a copy with only serializable data
+                serializable_change = {
+                    'file_path': change['file_path'],
+                    'content': change['content'],
+                    'original_content': change['original_content'],
+                    'changes_applied': change['changes_applied'],
+                    'analysis': change['analysis']
+                }
+                serializable_changes.append(serializable_change)
+            
+            # Write to file
+            with open(output_file, 'w') as f:
+                json.dump(serializable_changes, f, indent=2)
+            
+            logger.info(f"Saved changes to {output_file}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving changes to file: {str(e)}")
+            return False
+
+    def run(self, dry_run=False, output_file=None, max_workers=None):
+        """Run the RepoSage analysis and improvement process.
+        
+        Args:
+            dry_run: If True, generate changes but do not create PRs
+            output_file: Path to save changes to a JSON file
+            max_workers: Maximum number of worker threads for parallel processing
+        """
         logger.info("Starting RepoSage analysis...")
         
-        # Create a new branch
-        if not self.create_branch():
+        # Only create branch if we're not in dry run mode
+        if not dry_run and not self.create_branch():
             return
         
         # Fetch repository files
         files = self.fetch_repo_files()
         
-        # Analyze files and implement changes
-        all_changes = []
-        for file_content in files:
-            # Analyze the file
-            file_analysis = self.analyze_file(file_content)
-            if file_analysis:
-                # Implement suggested changes
-                file_changes = self.implement_changes(file_analysis)
-                if file_changes:
-                    # Commit the changes
-                    if self.commit_changes(file_changes):
-                        all_changes.append(file_changes)
+        # Analyze files in parallel
+        file_analyses = self.analyze_files_parallel(files, max_workers=max_workers)
         
-        # Create a pull request with all changes
-        if all_changes:
-            pr = self.create_pull_request(all_changes)
-            if pr:
-                print(f"\n✅ Pull request created successfully: {pr.html_url}")
-                print(f"RepoSage suggested improvements to {len(all_changes)} files.")
+        # Implement changes for each analyzed file
+        changes_list = []
+        for file_analysis in file_analyses:
+            file_changes = self.implement_changes(file_analysis)
+            if file_changes:
+                changes_list.append(file_changes)
+        
+        # Save changes to file if requested
+        if output_file and changes_list:
+            if self.save_changes_to_file(changes_list, output_file):
+                print(f"\n💾 Saved changes to {output_file}")
+                print(f"You can review the changes using: python generate_diff.py {output_file}")
+        
+        # Create PRs if not in dry run mode
+        if not dry_run and changes_list:
+            pr_urls = self.create_individual_pull_requests(changes_list)
+            if pr_urls:
+                print(f"\n✅ Created {len(pr_urls)} pull requests successfully:")
+                for url in pr_urls:
+                    print(f"  - {url}")
+                print(f"RepoSage suggested improvements to {len(changes_list)} files.")
             else:
-                print("\n❌ Failed to create pull request.")
+                print("\n❌ Failed to create pull requests.")
+        elif dry_run and changes_list:
+            print(f"\n🔍 Dry run completed. Found {len(changes_list)} files with potential improvements.")
+            if not output_file:
+                print("Use --output-file to save these changes for later review.")
         else:
             print("\n⚠️ No improvements were identified or implemented.")
 
@@ -392,6 +551,9 @@ def main():
         parser.add_argument('--model', '-m', default=DEFAULT_MODEL, help=f'Model to use for analysis (default: {DEFAULT_MODEL})')
         parser.add_argument('--base-branch', '-b', default='main', help='Base branch to use for analysis (default: main)')
         parser.add_argument('--description', '-d', help='Optional description of what you want RepoSage to focus on')
+        parser.add_argument('--dry-run', action='store_true', help='Generate changes but do not create PRs')
+        parser.add_argument('--output-file', help='Save changes to a JSON file for later review')
+        parser.add_argument('--max-workers', type=int, help='Maximum number of parallel workers for file analysis')
         
         # Parse arguments
         args = parser.parse_args()
@@ -406,8 +568,12 @@ def main():
             description=args.description
         )
         
-        # Run the bot
-        bot.run()
+        # Run the bot with additional options
+        bot.run(
+            dry_run=args.dry_run,
+            output_file=args.output_file,
+            max_workers=args.max_workers
+        )
     except Exception as e:
         logger.error(f"RepoSage failed: {str(e)}")
         print(f"\n❌ Error: {str(e)}")
