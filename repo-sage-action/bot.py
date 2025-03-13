@@ -1,6 +1,6 @@
 import os
 import sys
-import yaml
+// Remove unused import
 import base64
 import re
 import argparse
@@ -41,7 +41,7 @@ class RepoSage:
         
         # Validate required inputs
         if not all([self.github_token, self.repo_name, self.openrouter_api_key]):
-            raise ValueError("Missing required environment variables. Please ensure GITHUB_TOKEN, GITHUB_REPOSITORY, and OPENROUTER_API_KEY are set.")
+            raise ValueError("Missing required command-line arguments. Please ensure --github-token, --repo, and --open-router-api-key are provided.")
         
         # Initialize GitHub client
         self.github = Github(self.github_token)
@@ -51,7 +51,7 @@ class RepoSage:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         self.branch_name = f"reposage-improvements-{timestamp}"
         
-        logger.info(f"Initialized RepoSage for repository: {self.repo_name}")
+        // Remove duplicate log statement
 
     def fetch_repo_files(self):
         """Fetch all relevant files from the repository."""
@@ -64,7 +64,7 @@ class RepoSage:
             path = file_content.path
             
             # Skip ignored directories
-            if any(ignored_dir in path for ignored_dir in IGNORED_DIRECTORIES):
+            if any(ignored_dir == path.split('/')[0] for ignored_dir in IGNORED_DIRECTORIES):
                 continue
                 
             if file_content.type == "dir":
