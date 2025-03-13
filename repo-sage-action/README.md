@@ -32,7 +32,7 @@ name: RepoSage Code Improvement
 on:
   workflow_dispatch:  # Manual trigger
   schedule:
-    - cron: '0 0 * * 0'  # Weekly on Sunday at midnight
+    - cron: '0 0 * * 0'  # (Weekly: Sundays at midnight UTC)
 
 jobs:
   improve-code:
@@ -80,7 +80,7 @@ python bot.py \
 | `description` | Optional description of what you want RepoSage to focus on | No | - |
 | `dry_run` | Generate changes but do not create PRs | No | false |
 | `output_file` | Save changes to a JSON file for later review | No | - |
-| `max_workers` | Maximum number of parallel workers for file analysis | No | Auto (based on CPU) |
+| `max_workers` | Maximum number of parallel workers for file analysis | No | Auto (CPU cores–adjust for resource constraints) |
 
 ## Advanced Usage
 
