@@ -20,4 +20,4 @@ FROM gcr.io/distroless/python3-debian10:latest
 COPY --from=builder /app /app
 WORKDIR /app
 ENV PYTHONPATH /app
-CMD ["/app/bot.py"]
+CMD ["python", "/app/bot.py"]
