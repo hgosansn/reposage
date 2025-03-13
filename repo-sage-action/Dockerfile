@@ -3,6 +3,7 @@ ADD . /app
 WORKDIR /app
 
 # We are installing a dependency here directly into our app source dir
+python -m pip install --upgrade pip
 pip install -r ./requirements.txt
 
 
