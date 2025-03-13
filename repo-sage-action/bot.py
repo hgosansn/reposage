@@ -81,9 +81,19 @@ class RepoSage:
         try:
             file_path = file_content.path
             file_ext = Path(file_path).suffix
-            file_content_str = base64.b64decode(file_content.content).decode('utf-8')
+            
+            # Safely decode the file content
+            try:
+                file_content_str = base64.b64decode(file_content.content).decode('utf-8')
+            except UnicodeDecodeError:
+                # Try with error handling for problematic characters
+                file_content_str = base64.b64decode(file_content.content).decode('utf-8', errors='replace')
             
             logger.info(f"Analyzing file: {file_path}")
+            
+            # Sanitize file content to avoid issues with special characters
+            # This helps prevent unterminated string errors
+            sanitized_content = json.dumps(file_content_str)[1:-1]  # Remove outer quotes from JSON string
             
             # Prepare the prompt for the AI model
             prompt = f"""You are RepoSage, an AI assistant specialized in code analysis and improvement.
@@ -92,7 +102,7 @@ Analyze the following file and suggest specific improvements. The file is: {file
 
 File content:
 ```{file_ext}
-{file_content_str}
+{sanitized_content}
 ```
 
 Provide your analysis in the following JSON format:
@@ -120,28 +130,60 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
             
             # Extract JSON from the response
             analysis_text = response['choices'][0]['message']['content']
+
+            # For debugging purposes only - don't log the entire response in production
+            # logger.info(f"Analysis text: {analysis_text}")
+            logger.info(f"Received analysis response for {file_path}")
             
-            # Extract JSON from the response text (handles cases where model might add markdown formatting)
-            json_match = re.search(r'```json\s*(.+?)\s*```', analysis_text, re.DOTALL)
+            # More robust JSON extraction
+            # First try to extract JSON from code blocks
+            json_match = re.search(r'```(?:json)?\s*(.+?)\s*```', analysis_text, re.DOTALL)
             if json_match:
-                analysis_json = json.loads(json_match.group(1))
-            else:
-                # Try to find any JSON-like structure in the response
-                json_match = re.search(r'\{\s*"analysis".*\}', analysis_text, re.DOTALL)
-                if json_match:
-                    analysis_json = json.loads(json_match.group(0))
-                else:
-                    # Fallback: try to parse the entire response as JSON
-                    try:
-                        analysis_json = json.loads(analysis_text)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Could not parse JSON from response for {file_path}")
-                        return None
+                try:
+                    analysis_json = json.loads(json_match.group(1))
+                    return {
+                        'file_path': file_path,
+                        'analysis': analysis_json
+                    }
+                except json.JSONDecodeError:
+                    logger.warning(f"Found code block but couldn't parse JSON for {file_path}")
             
-            return {
-                'file_path': file_path,
-                'analysis': analysis_json
-            }
+            # Try to find any JSON-like structure in the response
+            json_match = re.search(r'(\{\s*"analysis".*?\}\s*$)', analysis_text, re.DOTALL)
+            if json_match:
+                try:
+                    analysis_json = json.loads(json_match.group(1))
+                    return {
+                        'file_path': file_path,
+                        'analysis': analysis_json
+                    }
+                except json.JSONDecodeError:
+                    logger.warning(f"Found JSON-like structure but couldn't parse for {file_path}")
+            
+            # Fallback: try to parse the entire response as JSON
+            try:
+                analysis_json = json.loads(analysis_text)
+                return {
+                    'file_path': file_path,
+                    'analysis': analysis_json
+                }
+            except json.JSONDecodeError:
+                logger.warning(f"Could not parse JSON from response for {file_path}")
+                
+                # Last resort: try to extract any valid JSON object from the text
+                try:
+                    # Find anything that looks like a JSON object
+                    potential_json = re.search(r'(\{.*\})', analysis_text, re.DOTALL)
+                    if potential_json:
+                        analysis_json = json.loads(potential_json.group(1))
+                        return {
+                            'file_path': file_path,
+                            'analysis': analysis_json
+                        }
+                except Exception:
+                    pass
+                
+                return None
             
         except Exception as e:
             logger.error(f"Error analyzing file {file_path}: {str(e)}")

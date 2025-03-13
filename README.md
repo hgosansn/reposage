@@ -34,7 +34,7 @@ To test the bot's functionality, follow these steps:
 
 **Run the Bot**: Once the pull request is merged, navigate to the repository's root directory and run the bot.
 
-    ```sh
-    python repo-sage-action/bot.py
-    ```
+```sh
+python repo-sage-action/bot.py
+```
 
