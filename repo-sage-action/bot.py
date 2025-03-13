@@ -40,7 +40,7 @@ class RepoSage:
         # log the first 5 characters of the github token
         logger.info(f"Initialized RepoSage for repository: {self.repo_name} with github token: {self.github_token[:5]}******")
         # log the first 5 characters of the openrouter api key
-        logger.info(f"Openrouter api key: {self.openrouter_api_key[:5]}******")
+        logger.debug(f"Openrouter API key masked: {self.openrouter_api_key[:5]}...")
         
         # Validate required inputs
         if not all([self.github_token, self.repo_name, self.openrouter_api_key]):
