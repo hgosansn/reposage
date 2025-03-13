@@ -34,9 +34,8 @@ class RepoSage:
         self.base_branch = base_branch
 
         # log the first 5 characters of the github token
-        logger.info(f"Initialized RepoSage for repository: {self.repo_name} with github token: {self.github_token[:5]}******")
-        # log the first 5 characters of the openrouter api key
-        logger.info(f"Openrouter api key: {self.openrouter_api_key[:5]}******")
+        logger.info(f"Initialized RepoSage for repository: {self.repo_name}")
+        logger.info(f"OpenRouter API key initialized.")
         
         # Validate required inputs
         if not all([self.github_token, self.repo_name, self.openrouter_api_key]):
@@ -135,54 +134,11 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
             # logger.info(f"Analysis text: {analysis_text}")
             logger.info(f"Received analysis response for {file_path}")
             
-            # More robust JSON extraction
-            # First try to extract JSON from code blocks
-            json_match = re.search(r'```(?:json)?\s*(.+?)\s*```', analysis_text, re.DOTALL)
-            if json_match:
-                try:
-                    analysis_json = json.loads(json_match.group(1))
-                    return {
-                        'file_path': file_path,
-                        'analysis': analysis_json
-                    }
-                except json.JSONDecodeError:
-                    logger.warning(f"Found code block but couldn't parse JSON for {file_path}")
-            
-            # Try to find any JSON-like structure in the response
-            json_match = re.search(r'(\{\s*"analysis".*?\}\s*$)', analysis_text, re.DOTALL)
-            if json_match:
-                try:
-                    analysis_json = json.loads(json_match.group(1))
-                    return {
-                        'file_path': file_path,
-                        'analysis': analysis_json
-                    }
-                except json.JSONDecodeError:
-                    logger.warning(f"Found JSON-like structure but couldn't parse for {file_path}")
-            
-            # Fallback: try to parse the entire response as JSON
             try:
                 analysis_json = json.loads(analysis_text)
-                return {
-                    'file_path': file_path,
-                    'analysis': analysis_json
-                }
+                return {'file_path': file_path, 'analysis': analysis_json}
             except json.JSONDecodeError:
                 logger.warning(f"Could not parse JSON from response for {file_path}")
-                
-                # Last resort: try to extract any valid JSON object from the text
-                try:
-                    # Find anything that looks like a JSON object
-                    potential_json = re.search(r'(\{.*\})', analysis_text, re.DOTALL)
-                    if potential_json:
-                        analysis_json = json.loads(potential_json.group(1))
-                        return {
-                            'file_path': file_path,
-                            'analysis': analysis_json
-                        }
-                except Exception:
-                    pass
-                
                 return None
             
         except Exception as e:
@@ -243,7 +199,7 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
                     improved = change['improved_code']
                     
                     # Only apply the change if the original code exists in the file
-                    if original in new_content:
+                    if new_content.find(original) != -1:
                         new_content = new_content.replace(original, improved)
                         changes_applied += 1
             
