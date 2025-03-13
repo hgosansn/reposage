@@ -16,7 +16,7 @@ runs:
   image: "python:3.8-slim"
   args:
     - "python"
-    - "/repo-sage-action/bot.py"
+    - "./bot.py"
 branding:
   icon: "robot"
   color: "blue"
