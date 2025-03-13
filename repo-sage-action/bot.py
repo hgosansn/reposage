@@ -24,13 +24,12 @@ MAX_TOKENS = 4096
 DEFAULT_MODEL = "google/gemma-3-27b-it:free"
 
 class RepoSage:
-    def __init__(self):
-        # Read inputs from the GitHub Action or environment variables
-        self.github_token = os.environ.get('INPUT_GITHUB_TOKEN') or os.environ.get('GITHUB_TOKEN')
-        self.repo_name = os.environ.get('INPUT_REPO', os.environ['GITHUB_REPOSITORY'])
-        self.openrouter_api_key = os.environ.get('INPUT_OPEN_ROUTER_API_KEY') or os.environ.get('OPENROUTER_API_KEY')
-        self.model = os.environ.get('INPUT_MODEL') or DEFAULT_MODEL
-        self.base_branch = os.environ.get('INPUT_BASE_BRANCH') or 'main'
+    def __init__(self, github_token, repo_name, openrouter_api_key, model=DEFAULT_MODEL, base_branch='main'):
+        self.github_token = github_token
+        self.repo_name = repo_name
+        self.openrouter_api_key = openrouter_api_key
+        self.model = model
+        self.base_branch = base_branch
         
         # Validate required inputs
         if not all([self.github_token, self.repo_name, self.openrouter_api_key]):
