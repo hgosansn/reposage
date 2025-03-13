@@ -21,8 +21,8 @@ runs:
     - name: Run RepoSage
       shell: bash
       run: |
-        pip install -r ./requirements.txt
-        python ./bot.py --github-token ${{ inputs.github_token }} --open-router-api-key ${{ inputs.open_router_api_key }} --repo ${{ inputs.repo }}
+        pip install -r repo-sage-action/requirements.txt
+        python repo-sage-action/bot.py --github-token ${{ inputs.github_token }} --open-router-api-key ${{ inputs.open_router_api_key }} --repo ${{ inputs.repo }}
 branding:
   icon: "robot"
   color: "blue"
