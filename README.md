@@ -32,13 +32,18 @@ You can also provide additional parameters:
 
 ```sh
 python repo-sage-action/bot.py \
-  --github-token YOUR_TOKEN \
-  --repo owner/repo \
-  --open-router-api-key YOUR_API_KEY \
+  --github-token <YOUR_TOKEN> \
+  --repo <owner/repo> \
+  --open-router-api-key <YOUR_API_KEY> \
   --model "qwen/qwq-32b:free" \
   --base-branch "main" \
-  --description "Focus on improving error handling and documentation"
+  --description "Focus area: Error handling"
 ```
+
+**Parameters**:
+- `--model`: AI model (default: qwen/qwq-32b:free)
+- `--base-branch`: Analysis target branch (default: main)
+- `--description`: Specific focus area for analysis
 
 ### Manual GitHub Action Trigger
 
@@ -58,7 +63,10 @@ You can manually trigger the RepoSage action from your GitHub repository:
 
 To test the bot's functionality, follow these steps:
 
-**Run the Bot**: Once the pull request is merged, navigate to the repository's root directory and run the bot.
+**Run the Bot**: Execute the following command in your repository's root directory:
+```sh
+python repo-sage-action/bot.py --github-token $GITHUB_TOKEN --repo owner/repo --open-router-api-key $ROUTER_API_KEY
+```
 
 ```sh
 python repo-sage-action/bot.py --github-token YOUR_TOKEN --repo owner/repo --open-router-api-key YOUR_API_KEY
