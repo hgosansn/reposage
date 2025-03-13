@@ -21,7 +21,7 @@ runs:
     - name: Run RepoSage
       shell: bash
       run: |
-        pip install -r reposage/requirements.txt
+        pip install -r ./requirements.txt
         python ./bot.py --github-token ${{ inputs.github_token }} --open-router-api-key ${{ inputs.open_router_api_key }} --repo ${{ inputs.repo }}
 branding:
   icon: "robot"
