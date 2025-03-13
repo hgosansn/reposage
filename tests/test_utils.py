@@ -44,7 +44,7 @@ def create_mock_file_content(path, content="def old_function():\n    pass", sha=
     encoded_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
     
     # Configure the mock to return the encoded content when content property is accessed
-    type(mock_file).content = PropertyMock(return_value=encoded_content)
+    mock_file.content = PropertyMock(return_value=encoded_content)
     
     # Also provide decoded_content for convenience
     mock_file.decoded_content = content.encode('utf-8')
@@ -85,12 +85,11 @@ def mock_openrouter_response(file_path=None, status_code=200, suggested_changes=
     """
     # Default suggested changes if none provided
     if suggested_changes is None:
-        if '.py' in (file_path or ''):
-            suggested_changes = [{
+        suggested_changes = [{
                 "original_code": "def f(x, y):",
                 "improved_code": "def multiply(x, y):",
                 "explanation": "Improved function name to be more descriptive"
-            }]
+            }] if file_path and '.py' in file_path else []
         elif '.js' in (file_path or ''):
             suggested_changes = [{
                 "original_code": "function calc(a, b) {",
@@ -148,13 +147,8 @@ def setup_mock_github_repo(mock_github, files=None):
         def mock_get_contents(path, ref=None):
             if path == '':
                 return files
-            
-            # Return specific file if path matches
-            for file in files:
-                if file.path == path:
-                    return file
-            
-            return None
+            file_map = {file.path: file for file in files}
+            return file_map.get(path)
         
         mock_repo.get_contents.side_effect = mock_get_contents
     
