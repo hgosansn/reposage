@@ -12,11 +12,13 @@ inputs:
     description: "Repository to analyze (defaults to current repository)"
     required: false
   model:
-    description: "AI model to use for analysis (default: google/gemma-3-27b-it:free)"
+    description: "AI model to use for analysis"
     required: false
+    default: "google/gemma-3-27b-it:free"
   base_branch:
-    description: "Base branch to use for analysis (default: main)"
+    description: "Base branch to use for analysis"
     required: false
+    default: "main"
   description:
     description: "Optional description of what you want RepoSage to focus on"
     required: false
@@ -36,9 +38,9 @@ runs:
   using: "composite"
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
-        python-version: "3.8"
+        python-version: "3.10"
     - name: Run RepoSage
       shell: bash
       run: |
@@ -49,7 +51,7 @@ runs:
           --repo ${{ inputs.repo }} \
           --model ${{ inputs.model }} \
           --base-branch ${{ inputs.base_branch }} \
-          ${{ inputs.description != '' && format('--description "{0}"', inputs.description) || '' }} \
+          ${{ inputs.description != '' && format('--description \'{0}\'', inputs.description) || '' }} \
           ${{ inputs.dry_run == 'true' && '--dry-run' || '' }} \
           ${{ inputs.output_file != '' && format('--output-file "{0}"', inputs.output_file) || '' }} \
           ${{ inputs.max_workers != '0' && format('--max-workers {0}', inputs.max_workers) || '' }}
