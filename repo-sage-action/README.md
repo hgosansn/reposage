@@ -38,7 +38,7 @@ jobs:
   improve-code:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Run RepoSage
         uses: your-username/repo-sage-action@main
         with:
@@ -93,7 +93,7 @@ python bot.py \
   --github-token YOUR_GITHUB_TOKEN \
   --open-router-api-key YOUR_OPENROUTER_API_KEY \
   --repo owner/repo-name \
-  --dry-run \
+  --dry_run \
   --output-file "changes.json"
 ```
 
