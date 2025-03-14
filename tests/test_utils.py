@@ -34,7 +34,7 @@ def create_mock_file_content(path, content="def old_function():\n    pass", sha=
     mock_file = MagicMock()
     mock_file.path = path
     mock_file.type = "file"
-    mock_file.size = file_size or len(content)
+    mock_file.size = file_size or len(content.encode('utf-8'))
     
     # Set SHA if provided
     if sha:
