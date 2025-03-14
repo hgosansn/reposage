@@ -62,10 +62,12 @@ class RepoSage:
         contents = self.repo.get_contents("")
         files = []
         
+        from collections import deque
+
+        contents = deque([self.repo.get_contents("]")])
+        ...
         while contents:
-            file_content = contents.pop(0)
-            path = file_content.path
-            
+            file_content = contents.popleft()            
             # Skip ignored directories
             if any(ignored_dir in path for ignored_dir in IGNORED_DIRECTORIES):
                 continue
@@ -253,7 +255,20 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
                     
                     # Only apply the change if the original code exists in the file
                     if original in new_content:
-                        new_content = new_content.replace(original, improved)
+                        from difflib import SequenceMatcher
+
+        # Check exact line/substring matches more safely
+        original_lines = original.split('
+')
+        improved_lines = improved.split('
+')
+        if len(original_lines)!=len(improved_lines):
+            continue  # Prevent partial matching
+        for line in original_lines:
+            if line not in new_content:
+                continue
+        # Only replace if entire block exists
+        new_content = new_content.replace('\n'.join(original_lines), '\n'.join(improved_lines))
                         changes_applied += 1
             
             if changes_applied > 0 and new_content != current_content:
@@ -403,7 +418,7 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
             try:
                 file_path = file_changes['file_path']
                 # Create a unique branch for this file
-                file_branch = f"{self.branch_name}-{Path(file_path).stem}"
+                file_branch = f"{self.branch_name}-{hashlib.sha1(file_path.encode()).hexdigest()[:8]}"
                 
                 # Create branch from base
                 source = self.repo.get_branch(self.base_branch)
