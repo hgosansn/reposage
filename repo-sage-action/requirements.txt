@@ -2,3 +2,7 @@ PyGithub
 requests
 openai
 pyyaml
+crewai>=0.102.0
+langchain-openai>=0.0.3
+langchain-core>=0.1.0
+pysqlite3-binary~=0.5.2

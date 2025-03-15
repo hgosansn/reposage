@@ -1,0 +1,5 @@
+-r repo-sage-action/requirements.txt
+pysqlite3-binary~=0.5.2
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
