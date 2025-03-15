@@ -12,7 +12,7 @@ from pathlib import Path
 import logging
 import concurrent.futures
 from typing import List, Dict, Any, Optional
-import tempfile
+
 
 # Configure logging
 logging.basicConfig(
@@ -38,7 +38,7 @@ class RepoSage:
         self.description = description
 
         # log the first 5 characters of the github token
-        logger.info(f"Initialized RepoSage for repository: {self.repo_name} with github token: {self.github_token[:5]}******")
+        logger.info(f"Initialized RepoSage for repository: {self.repo_name}")
         # log the first 5 characters of the openrouter api key
         logger.info(f"Openrouter api key: {self.openrouter_api_key[:5]}******")
         
@@ -67,7 +67,7 @@ class RepoSage:
             path = file_content.path
             
             # Skip ignored directories
-            if any(ignored_dir in path for ignored_dir in IGNORED_DIRECTORIES):
+            if any(ignored_dir == component for component in path.split('/') for ignored_dir in IGNORED_DIRECTORIES):
                 continue
                 
             if file_content.type == "dir":
@@ -100,7 +100,7 @@ class RepoSage:
             
             # Sanitize file content to avoid issues with special characters
             # This helps prevent unterminated string errors
-            sanitized_content = json.dumps(file_content_str)[1:-1]  # Remove outer quotes from JSON string
+            sanitized_content = file_content_str.replace('`', '\\`').replace('\n', '\\n')  # Remove outer quotes from JSON string
             
             # Prepare the prompt for the AI model
             prompt = f"""You are RepoSage, an AI assistant specialized in code analysis and improvement.
