@@ -128,8 +128,9 @@ RepoSage can analyze the following file types:
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.9+ (3.8+ supported but 3.9+ recommended)
 - GitHub repository access
+- OpenRouter API key (for model access)
 
 ## License
 
