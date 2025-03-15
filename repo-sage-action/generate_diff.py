@@ -39,8 +39,13 @@ def generate_diff(original_content: str, modified_content: str, file_path: str) 
     
     try:
         # Generate diff using git diff
-        cmd = ["git", "diff", "--no-index", "--color=always", orig_file, mod_file]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        cmd = [
+    'git', 'diff', '--no-index', '--color=always',
+    '--label', f'a/{file_path}',
+    '--label', f'b/{file_path}',
+    orig_file, mod_file
+]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         
         # Clean up the diff output to make it more readable
         diff_lines = result.stdout.split('\n')
