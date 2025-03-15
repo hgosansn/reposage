@@ -58,9 +58,8 @@ You can manually trigger the RepoSage action from your GitHub repository:
 
 To test the bot's functionality, follow these steps:
 
-**Run the Bot**: Once the pull request is merged, navigate to the repository's root directory and run the bot.
+**Test the Bot**: Run the bot from the repository root after configuring your settings (no need to merge a PR first).
 
-```sh
-python repo-sage-action/bot.py --github-token YOUR_TOKEN --repo owner/repo --open-router-api-key YOUR_API_KEY
-```
+万千瓦
+For CLI usage details, see [Running the Bot: Local Execution](#local-execution)Earlier section instructions.
 
