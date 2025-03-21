@@ -142,7 +142,7 @@ class TestRepoSage(unittest.TestCase):
     def test_analyze_file(self):
         """Test file analysis with OpenRouter API."""
         # Create mock file
-        mock_file = create_mock_file_content('test.py')
+        mock_file = create_mock_file_content('test.py', content='def old_function():\n    pass')
         
         # Create bot and analyze file
         bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
@@ -201,7 +201,7 @@ class TestRepoSage(unittest.TestCase):
         }
         
         # Set up mock file content for implementation
-        mock_file = create_mock_file_content('test.py')
+        mock_file = create_mock_file_content('test.py', content='def old_function():\n    pass')
         self.mock_repo.get_contents.return_value = mock_file
         
         # Create bot and implement changes
@@ -240,7 +240,7 @@ class TestRepoSage(unittest.TestCase):
         }
         
         # Set up mock file for commit
-        mock_file = create_mock_file_content('test.py')
+        mock_file = create_mock_file_content('test.py', content='def old_function():\n    pass')
         self.mock_repo.get_contents.return_value = mock_file
         
         # Create bot and commit changes
@@ -283,7 +283,8 @@ class TestRepoSage(unittest.TestCase):
         call_args = self.mock_repo.create_pull.call_args
         self.assertTrue('RepoSage: Code improvements' in call_args[1]['title'])
         self.assertTrue('AI-Suggested Code Improvements' in call_args[1]['body'])
-        self.assertTrue('test.py' in call_args[1]['body'])
+        self.assertIn('Improved function naming', call_args[1]['body'])
+self.assertIn('Better function name', call_args[1]['body'])
 
     @patch('bot.RepoSage.fetch_repo_files')
     @patch('bot.RepoSage.analyze_files_parallel')
