@@ -13,6 +13,7 @@ import logging
 import concurrent.futures
 from typing import List, Dict, Any, Optional
 import tempfile
+import subprocess
 
 # Configure logging
 logging.basicConfig(
@@ -104,7 +105,10 @@ class RepoSage:
             sanitized_content = json.dumps(file_content_str)[1:-1]  # Remove outer quotes from JSON string
             
             # Prepare the prompt for the AI model
-            prompt = f"""You are RepoSage, an AI assistant specialized in code analysis and improvement.
+            prompt = f"""You are RepoSage, an AI assistant specialized in code analysis and self-improvement.
+
+You are designed to analyze codebases (including your own code) and suggest concrete improvements with tests.
+As a self-improving system, you can and should suggest changes to improve your own codebase.
 
 Analyze the following file and suggest specific improvements. The file is: {file_path}
 
@@ -127,13 +131,21 @@ Provide your analysis in the following JSON format:
     {{
       "original_code": "Exact code snippet to be replaced",
       "improved_code": "Improved code replacement",
-      "explanation": "Explanation of why this change improves the code"
+      "explanation": "Explanation of why this change improves the code",
+      "test_code": "Unit test code that validates this change works correctly" 
     }}
   ],
   "summary": "A concise summary of the main improvements suggested"
 }}
 
-Make sure your suggestions are concrete, specific, and would genuinely improve the codebase. Focus on the most impactful changes."""
+IMPORTANT GUIDELINES:
+1. Make sure your suggestions are concrete, specific, and would genuinely improve the codebase.
+2. Focus on the most impactful changes.
+3. For EACH suggested change, you MUST include test code that validates the change works correctly.
+4. The tests should be comprehensive and follow best practices for the language.
+5. If modifying existing functionality, ensure tests verify the functionality still works as expected.
+6. If this is your own code, consider how you could improve yourself to be more effective.
+"""
 
             # Call OpenRouter API
             response = self.call_openrouter_api(prompt)
@@ -209,7 +221,7 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
         data = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are RepoSage, an expert code analyzer that suggests concrete improvements to codebases."},
+                {"role": "system", "content": "You are RepoSage, an expert code analyzer that suggests concrete improvements to codebases, including your own. Always include tests for any changes you suggest, and consider how you could improve your own code."},
                 {"role": "user", "content": prompt}
             ],
             "max_tokens": MAX_TOKENS
@@ -227,8 +239,16 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
             
         return response.json()
 
-    def implement_changes(self, file_analysis):
-        """Implement the suggested changes for a file."""
+    def implement_changes(self, file_analysis, dry_run=False):
+        """Implement the suggested changes for a file.
+        
+        Args:
+            file_analysis: Dictionary containing file path and analysis
+            dry_run: If True, don't actually commit the changes
+            
+        Returns:
+            Dictionary with details of changes made, or None if no changes
+        """
         if not file_analysis or 'analysis' not in file_analysis:
             return None
             
@@ -238,14 +258,14 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
         if 'suggested_changes' not in analysis or not analysis['suggested_changes']:
             logger.info(f"No changes suggested for {file_path}")
             return None
-            
+        
         try:
-            # Get the current file content
-            file_content = self.repo.get_contents(file_path, ref=self.base_branch)
-            current_content = base64.b64decode(file_content.content).decode('utf-8')
-            new_content = current_content
+            # Get the file content
+            file_contents = self.repo.get_contents(file_path, ref=self.base_branch)
+            content = base64.b64decode(file_contents.content).decode('utf-8')
+            original_content = content
             
-            # Apply each suggested change
+            # Apply each change to the content
             changes_applied = 0
             for change in analysis['suggested_changes']:
                 if 'original_code' in change and 'improved_code' in change:
@@ -253,31 +273,74 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
                     improved = change['improved_code']
                     
                     # Only apply the change if the original code exists in the file
-                    if original in new_content:
-                        new_content = new_content.replace(original, improved)
+                    if original in content:
+                        content = content.replace(original, improved)
                         changes_applied += 1
             
-            if changes_applied > 0 and new_content != current_content:
-                logger.info(f"Applied {changes_applied} changes to {file_path}")
-                # Commit the changes after applying them
-                self.commit_changes({
-                    'file_path': file_path,
-                    'content': new_content,
-                    'analysis': analysis
-                })
-                return {
-                    'file_path': file_path,
-                    'content': new_content,
-                    'original_content': current_content,  # Store original content for diff generation
-                    'changes_applied': changes_applied,
-                    'analysis': analysis
-                }
-            else:
-                logger.info(f"No changes were applied to {file_path}")
+            # Check if the content actually changed
+            if content == original_content or changes_applied == 0:
+                logger.info(f"No changes made to {file_path}")
                 return None
+            
+            # Generate commit message
+            message_details = self.generate_commit_message(file_path, analysis['suggested_changes'])
+            
+            if not dry_run:
+                # Update the file in the repository
+                self.repo.update_file(
+                    file_path,
+                    message_details,
+                    content,
+                    file_contents.sha,
+                    branch=self.branch_name
+                )
+                logger.info(f"Updated {file_path} with changes")
                 
+                # Create or update test files based on the changes
+                test_files = self.implement_tests(file_path, analysis['suggested_changes'])
+                
+                # Commit test files
+                for test_file_path, test_file_info in test_files.items():
+                    try:
+                        test_message = f"Add tests for changes to {file_path}"
+                        if test_file_info['exists']:
+                            # Update existing test file
+                            self.repo.update_file(
+                                test_file_path,
+                                test_message,
+                                test_file_info['content'],
+                                test_file_info['sha'],
+                                branch=self.branch_name
+                            )
+                            logger.info(f"Updated test file {test_file_path}")
+                        else:
+                            # Create new test file
+                            self.repo.create_file(
+                                test_file_path,
+                                test_message,
+                                test_file_info['content'],
+                                branch=self.branch_name
+                            )
+                            logger.info(f"Created test file {test_file_path}")
+                    except Exception as e:
+                        logger.error(f"Error committing test file {test_file_path}: {str(e)}")
+            else:
+                logger.info(f"Dry run: would update {file_path} with changes")
+                
+                # Log test files that would be created
+                test_files = self.implement_tests(file_path, analysis['suggested_changes'])
+                for test_file_path in test_files:
+                    logger.info(f"Dry run: would update/create test file {test_file_path}")
+            
+            return {
+                'file_path': file_path,
+                'content': content,
+                'original_content': original_content,  # Store original content for diff generation
+                'changes_applied': changes_applied,
+                'analysis': analysis
+            }
         except Exception as e:
-            logger.error(f"Error implementing changes for {file_path}: {str(e)}")
+            logger.error(f"Error implementing changes to {file_path}: {str(e)}")
             return None
 
     def create_branch(self):
@@ -509,55 +572,282 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
             logger.error(f"Error saving changes to file: {str(e)}")
             return False
 
-    def run(self, dry_run=False, output_file=None, max_workers=None):
+    def commit_changes_directly(self, changes_list, run_tests=True):
+        """Commit changes directly to the base branch.
+        
+        Args:
+            changes_list: List of changes to commit
+            run_tests: Whether to run tests before committing
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        if not changes_list:
+            logger.info("No changes to commit")
+            return False, "No changes to commit"
+        
+        try:
+            # Get commit messages and total changes
+            commit_messages, total_changes = self.generate_commit_messages(changes_list)
+            
+            if total_changes == 0:
+                logger.info("No actual changes to commit")
+                return False, "No actual changes to commit"
+            
+            logger.info(f"Committing {total_changes} changes to {self.base_branch}")
+            
+            # Run tests if requested
+            if run_tests:
+                # Get all the test files that were created/updated
+                test_files = []
+                for change in changes_list:
+                    # Extract test files from changes
+                    file_path = change['file_path']
+                    test_files_for_change = self.implement_tests(file_path, change['analysis']['suggested_changes'])
+                    test_files.extend(list(test_files_for_change.keys()))
+                
+                test_success, test_output = self.run_tests(test_files)
+                if not test_success:
+                    logger.error(f"Tests failed, aborting commit:\n{test_output}")
+                    return False, f"Tests failed: {test_output}"
+                logger.info("Tests passed successfully!")
+            
+            # Apply each change directly to the base branch
+            success_count = 0
+            for change in changes_list:
+                file_path = change['file_path']
+                new_content = change['content']
+                
+                try:
+                    # Get the current file content from the base branch
+                    file_content = self.repo.get_contents(file_path, ref=self.base_branch)
+                    
+                    # Generate commit message
+                    commit_msg = self.generate_commit_message(file_path, change['analysis']['suggested_changes'])
+                    
+                    # Update the file
+                    self.repo.update_file(
+                        file_path,
+                        commit_msg,
+                        new_content,
+                        file_content.sha,
+                        branch=self.base_branch
+                    )
+                    logger.info(f"Successfully updated {file_path} in {self.base_branch}")
+                    success_count += 1
+                    
+                    # Commit test files if they exist
+                    test_files = self.implement_tests(file_path, change['analysis']['suggested_changes'])
+                    for test_file_path, test_file_info in test_files.items():
+                        try:
+                            test_message = f"Add tests for changes to {file_path}"
+                            try:
+                                # Try to get existing test file
+                                existing_test_file = self.repo.get_contents(test_file_path, ref=self.base_branch)
+                                
+                                # Update existing test file
+                                self.repo.update_file(
+                                    test_file_path,
+                                    test_message,
+                                    test_file_info['content'],
+                                    existing_test_file.sha,
+                                    branch=self.base_branch
+                                )
+                                logger.info(f"Updated test file {test_file_path} in {self.base_branch}")
+                            except Exception:
+                                # Test file doesn't exist, create it
+                                self.repo.create_file(
+                                    test_file_path,
+                                    test_message,
+                                    test_file_info['content'],
+                                    branch=self.base_branch
+                                )
+                                logger.info(f"Created test file {test_file_path} in {self.base_branch}")
+                        except Exception as e:
+                            logger.error(f"Error committing test file {test_file_path}: {str(e)}")
+                            
+                except Exception as e:
+                    logger.error(f"Error committing {file_path} to {self.base_branch}: {str(e)}")
+            
+            if success_count > 0:
+                return True, f"Successfully committed {success_count} changes to {self.base_branch}"
+            else:
+                return False, "Failed to commit any changes"
+                
+        except Exception as e:
+            logger.error(f"Error during direct commit: {str(e)}")
+            return False, f"Error: {str(e)}"
+
+    def run(self, dry_run=False, output_file=None, max_workers=None, direct_commit=True):
         """Run the RepoSage analysis and improvement process.
         
         Args:
-            dry_run: If True, generate changes but do not create PRs
-            output_file: Path to save changes to a JSON file
-            max_workers: Maximum number of worker threads for parallel processing
+            dry_run: If True, only generate changes without creating PRs or commits
+            output_file: If provided, write the analysis to this file
+            max_workers: Maximum number of workers for parallel processing
+            direct_commit: If True, commit changes directly to base branch. If False, create PRs
+            
+        Returns:
+            A list of changes made
         """
         logger.info("Starting RepoSage analysis...")
         
-        # Only create branch if we're not in dry run mode
-        if not dry_run and not self.create_branch():
-            return
-        
-        # Fetch repository files
-        files = self.fetch_repo_files()
-        
-        # Analyze files in parallel
-        file_analyses = self.analyze_files_parallel(files, max_workers=max_workers)
-        
-        # Implement changes for each analyzed file
+        # Initialize variables
         changes_list = []
-        for file_analysis in file_analyses:
-            file_changes = self.implement_changes(file_analysis)
-            if file_changes:
-                changes_list.append(file_changes)
         
-        # Save changes to file if requested
-        if output_file and changes_list:
-            if self.save_changes_to_file(changes_list, output_file):
-                print(f"\n💾 Saved changes to {output_file}")
-                print(f"You can review the changes using: python generate_diff.py {output_file}")
+        # Get a list of all accessible files in the repository
+        all_files = self.fetch_repo_files()
         
-        # Create PRs if not in dry run mode
-        if not dry_run and changes_list:
-            pr_urls = self.create_individual_pull_requests(changes_list)
-            if pr_urls:
-                print(f"\n✅ Created {len(pr_urls)} pull requests successfully:")
-                for url in pr_urls:
-                    print(f"  - {url}")
-                print(f"RepoSage suggested improvements to {len(changes_list)} files.")
+        if not all_files:
+            logger.warning("No files found in the repository")
+            return []
+        
+        logger.info(f"Found {len(all_files)} files in the repository")
+        
+        # Skip large files and files in ignored paths
+        filtered_files = [f for f in all_files if self.should_analyze_file(f)]
+        logger.info(f"Analyzing {len(filtered_files)} files (excluded large files and ignored paths)")
+        
+        # Create branch for changes if not in dry-run mode and not direct commit
+        if not dry_run and not direct_commit:
+            self.create_branch()
+        
+        # Iterate through each file for analysis
+        all_analyses = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all file analysis tasks
+            future_to_file = {executor.submit(self.analyze_file, file_path): file_path for file_path in filtered_files}
+            
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_file):
+                file_path = future_to_file[future]
+                try:
+                    file_analysis = future.result()
+                    if file_analysis:
+                        all_analyses.append(file_analysis)
+                except Exception as e:
+                    logger.error(f"Error analyzing {file_path}: {str(e)}")
+        
+        # Save all analyses to file if requested
+        if output_file and all_analyses:
+            self.save_analyses_to_file(all_analyses, output_file)
+            logger.info(f"Saved analyses to {output_file}")
+        
+        # Implement changes for each file with suggested improvements
+        for file_analysis in all_analyses:
+            if 'analysis' in file_analysis and 'suggested_changes' in file_analysis['analysis'] and file_analysis['analysis']['suggested_changes']:
+                logger.info(f"Implementing changes for {file_analysis['file_path']}")
+                
+                if dry_run:
+                    # In dry run mode, just log what would happen
+                    logger.info(f"Dry run: would implement {len(file_analysis['analysis']['suggested_changes'])} changes to {file_analysis['file_path']}")
+                    changes_list.append(file_analysis)
+                else:
+                    # Use the existing implementation method which includes committing to the feature branch
+                    file_changes = self.implement_changes(file_analysis, dry_run=dry_run)
+                    if file_changes:
+                        changes_list.append(file_changes)
+        
+        # Create PR or commit directly
+        if changes_list and not dry_run:
+            if direct_commit:
+                # Commit changes directly to the base branch
+                success, message = self.commit_changes_directly(changes_list, run_tests=True)
+                if success:
+                    print(f"\n✅ {message}")
+                else:
+                    print(f"\n❌ {message}")
             else:
-                print("\n❌ Failed to create pull requests.")
-        elif dry_run and changes_list:
-            print(f"\n🔍 Dry run completed. Found {len(changes_list)} files with potential improvements.")
-            if not output_file:
-                print("Use --output-file to save these changes for later review.")
+                # Create a PR with the changes
+                pr_url = self.create_pull_request(changes_list)
+                if pr_url:
+                    print(f"\n✅ Pull request created: {pr_url}")
+                else:
+                    print("\n❌ Failed to create pull request")
+        
+        # Print summary
+        if changes_list:
+            total_changes = sum(change.get('changes_applied', 0) for change in changes_list if isinstance(change, dict))
+            print(f"\n✅ Analysis complete! Found {len(changes_list)} files with {total_changes} suggested improvements.")
+            if dry_run:
+                print(f"\nThis was a dry run. No changes were committed.")
+            elif output_file:
+                print(f"\nSaved changes to {output_file}")
         else:
             print("\n⚠️ No improvements were identified or implemented.")
+        
+        return changes_list
+
+    def run_tests(self, test_files=None):
+        """Run tests to ensure changes don't break functionality.
+        
+        Args:
+            test_files: List of test files to run specifically (optional)
+            
+        Returns:
+            Tuple of (success, output) where success is a boolean indicating if tests passed
+        """
+        logger.info("Running tests to validate changes...")
+        
+        try:
+            # Clone the repository to a temporary directory to run tests
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Clone the repo with the current branch
+                clone_cmd = [
+                    "git", "clone", 
+                    f"https://{self.token}@github.com/{self.repo_name}.git",
+                    "--branch", self.branch_name,
+                    "--single-branch", temp_dir
+                ]
+                clone_process = subprocess.run(
+                    clone_cmd, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                if clone_process.returncode != 0:
+                    logger.error(f"Failed to clone repository: {clone_process.stderr}")
+                    return False, clone_process.stderr
+                
+                # Determine what test command to run based on repo structure
+                if os.path.exists(os.path.join(temp_dir, "pytest.ini")) or os.path.exists(os.path.join(temp_dir, "tests")):
+                    # Run pytest if it's a Python project with tests directory
+                    test_cmd = ["python", "-m", "pytest"]
+                    if test_files:
+                        # If specific test files are provided, only run those
+                        test_cmd.extend(test_files)
+                    test_cmd.extend(["-v"])  # Verbose output
+                elif os.path.exists(os.path.join(temp_dir, "package.json")):
+                    # Run npm test if it's a JavaScript/Node.js project
+                    test_cmd = ["npm", "test"]
+                else:
+                    # Default to running Python's unittest
+                    test_cmd = ["python", "-m", "unittest", "discover"]
+                
+                # Run the test command
+                test_process = subprocess.run(
+                    test_cmd,
+                    cwd=temp_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                # Log test output
+                logger.info(f"Test output:\n{test_process.stdout}")
+                if test_process.stderr:
+                    logger.error(f"Test errors:\n{test_process.stderr}")
+                
+                # Return success if tests passed (return code 0)
+                success = test_process.returncode == 0
+                output = test_process.stdout + "\n" + test_process.stderr if test_process.stderr else test_process.stdout
+                
+                return success, output
+                
+        except Exception as e:
+            logger.error(f"Error running tests: {str(e)}")
+            return False, str(e)
 
 def main():
     try:
@@ -571,10 +861,11 @@ def main():
         parser.add_argument('--model', '-m', default=DEFAULT_MODEL, help=f'Model to use for analysis (default: {DEFAULT_MODEL})')
         parser.add_argument('--base-branch', '-b', default='main', help='Base branch to use for analysis (default: main)')
         parser.add_argument('--description', '-d', help='Optional description of what you want RepoSage to focus on')
-        parser.add_argument('--dry-run', action='store_true', help='Generate changes but do not create PRs')
+        parser.add_argument('--dry-run', action='store_true', help='Generate changes but do not create PRs or commit directly')
         parser.add_argument('--output-file', help='Save changes to a JSON file for later review')
         parser.add_argument('--max-workers', type=int, help='Maximum number of parallel workers for file analysis')
         parser.add_argument('--sequential', action='store_true', help='Run analysis sequentially instead of in parallel (useful for testing)')
+        parser.add_argument('--use-pr', action='store_true', help='Create pull requests instead of committing directly to the base branch')
         
         # Parse arguments
         args = parser.parse_args()
@@ -591,11 +882,18 @@ def main():
         )
         
         # Run the bot with additional options
-        bot.run(
+        changes_list = bot.run(
             dry_run=args.dry_run,
             output_file=args.output_file,
-            max_workers=args.max_workers
+            max_workers=args.max_workers,
+            direct_commit=not args.use_pr
         )
+        
+        # Save changes to file if changes were made
+        if changes_list:
+            if bot.save_changes_to_file(changes_list, args.output_file):
+                print(f"\n�� Saved changes to {args.output_file}")
+                print(f"You can review the changes using: python generate_diff.py {args.output_file}")
     except Exception as e:
         logger.error(f"RepoSage failed: {str(e)}")
         print(f"\n❌ Error: {str(e)}")

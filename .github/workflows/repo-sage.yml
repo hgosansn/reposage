@@ -20,6 +20,11 @@ on:
       description:
         description: 'Optional description of what you want RepoSage to focus on'
         required: false
+      use_pr:
+        description: 'Create pull requests instead of committing directly'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   analyze:
@@ -42,3 +47,4 @@ jobs:
           model: ${{ github.event.inputs.model || 'qwen/qwq-32b:free' }}
           base_branch: ${{ github.event.inputs.base_branch || 'main' }}
           description: ${{ github.event.inputs.description || '' }}
+          use_pr: ${{ github.event.inputs.use_pr || 'false' }}

@@ -1,37 +1,45 @@
 name: "RepoSage"
-description: "An AI-driven bot that analyzes a repository and suggests improvements based on AI and RAG."
-author: "Your Name"
+description: "AI-driven bot for repository analysis and improvement. RepoSage suggests and implements code improvements, generates tests for changes, and validates changes by running tests before committing."
+author: "ktzehan"
 inputs:
   github_token:
-    description: "GitHub Token"
+    description: "GitHub token for repository access"
     required: true
   open_router_api_key:
-    description: "Open Router API Key"
+    description: "OpenRouter API key for AI model access"
     required: true
   repo:
-    description: "Repository to analyze (defaults to current repository)"
+    description: "Repository name (e.g., \"username/repo\"), defaults to current repo"
     required: false
+    default: ${{ github.repository }}
   model:
-    description: "AI model to use for analysis (default: google/gemma-3-27b-it:free)"
+    description: "AI model to use for analysis"
     required: false
+    default: "anthropic/claude-3-opus:beta"
   base_branch:
-    description: "Base branch to use for analysis (default: main)"
+    description: "Base branch to use for analysis"
     required: false
+    default: "main"
   description:
-    description: "Optional description of what you want RepoSage to focus on"
+    description: "PR description or commit message description"
     required: false
+    default: "RepoSage identified these improvements for your codebase."
   dry_run:
-    description: "Generate changes but do not create PRs"
+    description: "Generate changes without creating PRs or committing directly. Useful for testing."
     required: false
-    default: 'false'
+    default: "false"
   output_file:
-    description: "Save changes to a JSON file for later review"
+    description: "Save analysis results to a JSON file"
     required: false
-    default: ''
+    default: ""
   max_workers:
-    description: "Maximum number of parallel workers for file analysis (default: auto-determine based on CPU count)"
+    description: "Maximum number of worker threads for parallel processing"
     required: false
-    default: '0'
+    default: "4"
+  use_pr:
+    description: "Create pull requests instead of committing directly to the base branch"
+    required: false
+    default: "false"
 runs:
   using: "composite"
   steps:
@@ -52,7 +60,8 @@ runs:
           ${{ inputs.description != '' && format('--description "{0}"', inputs.description) || '' }} \
           ${{ inputs.dry_run == 'true' && '--dry-run' || '' }} \
           ${{ inputs.output_file != '' && format('--output-file "{0}"', inputs.output_file) || '' }} \
-          ${{ inputs.max_workers != '0' && format('--max-workers {0}', inputs.max_workers) || '' }}
+          ${{ inputs.max_workers != '0' && format('--max-workers {0}', inputs.max_workers) || '' }} \
+          ${{ inputs.use_pr == 'true' && '--use-pr' || '' }}
 branding:
   icon: "robot"
   color: "blue"

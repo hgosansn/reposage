@@ -1,15 +1,15 @@
-import unittest
-from unittest.mock import patch, MagicMock, mock_open
-import os
-import json
-import base64
-from io import BytesIO
 import sys
 import os.path
+import unittest
+from pathlib import Path
+import tempfile
+import base64
+from unittest.mock import patch, Mock, MagicMock
 
 # Add the repo-sage-action directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'repo-sage-action')))
-from bot import RepoSage
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from repo_sage_action.bot import RepoSage
 from test_utils import create_mock_file_content, mock_openrouter_response, setup_mock_github_repo
 
 class TestRepoSage(unittest.TestCase):
@@ -23,6 +23,7 @@ class TestRepoSage(unittest.TestCase):
         self.openrouter_api_key = 'fake_openrouter_api_key'
         self.model = 'google/gemma-3-27b-it:free'
         self.base_branch = 'main'
+        self.description = "Test PR"
         
         # Create patches
         self.github_patch = patch('bot.Github')
@@ -65,6 +66,17 @@ class TestRepoSage(unittest.TestCase):
             }]
         }
         self.mock_requests.post.return_value = self.mock_response
+
+        # Create the bot with mocked dependencies
+        with patch('repo_sage_action.bot.Github') as mock_github_class:
+            mock_github_class.return_value = self.mock_github
+            self.bot = RepoSage(
+                token=self.github_token,
+                repo_name=self.repo_name,
+                base_branch=self.base_branch,
+                description=self.description,
+                model=self.model
+            )
 
     def tearDown(self):
         """Clean up after each test."""
@@ -343,6 +355,69 @@ class TestRepoSage(unittest.TestCase):
         mock_analyze_files_parallel.assert_called_once_with(mock_files, max_workers=None)
         self.assertEqual(mock_implement.call_count, len(mock_analyses))
         self.assertEqual(mock_create_pr.call_count, 0)  # create_individual_pull_requests is called instead
+
+    def test_implement_tests(self):
+        """Test the implement_tests method"""
+        # Mock suggested changes with test code
+        suggested_changes = [
+            {
+                "original_code": "def add(a, b):\n    return a + b",
+                "improved_code": "def add(a, b):\n    return a + b",
+                "explanation": "Add type hints to the function",
+                "test_code": """def test_add():
+    assert add(1, 2) == 3
+    assert add(-1, 1) == 0
+    assert add(0, 0) == 0"""
+            }
+        ]
+        
+        # Mock get_contents to simulate an existing test file
+        mock_content = Mock()
+        mock_content.content = base64.b64encode("# Existing test file".encode('utf-8'))
+        mock_content.sha = "fake_sha"
+        
+        with patch.object(self.bot.repo, 'get_contents', side_effect=Exception("File not found")):
+            # Test when the test file doesn't exist
+            test_files = self.bot.implement_tests("test_file.py", suggested_changes)
+            
+            # Check that we have one test file
+            self.assertEqual(len(test_files), 1)
+            
+            # Check the content of the test file
+            first_file = list(test_files.values())[0]
+            self.assertFalse(first_file['exists'])
+            self.assertIn("import unittest", first_file['content'])
+            self.assertIn("test_add()", first_file['content'])
+    
+    def test_run_tests(self):
+        """Test the run_tests method"""
+        with patch('subprocess.run') as mock_run:
+            # Mock subprocess.run to return success
+            mock_process = Mock()
+            mock_process.returncode = 0
+            mock_process.stdout = "All tests passed"
+            mock_process.stderr = ""
+            mock_run.return_value = mock_process
+            
+            # Test running tests
+            success, output = self.bot.run_tests()
+            
+            # Check that the tests passed
+            self.assertTrue(success)
+            self.assertEqual(output, "All tests passed")
+            
+            # Test with failing tests
+            mock_process.returncode = 1
+            mock_process.stdout = "Test failed"
+            mock_process.stderr = "Error in test"
+            mock_run.return_value = mock_process
+            
+            # Test running tests
+            success, output = self.bot.run_tests()
+            
+            # Check that the tests failed
+            self.assertFalse(success)
+            self.assertEqual(output, "Test failed\nError in test")
 
 if __name__ == '__main__':
     unittest.main()
