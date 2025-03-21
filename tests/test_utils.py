@@ -13,7 +13,9 @@ class MockResponse:
     def __init__(self, status_code, json_data):
         self.status_code = status_code
         self._json_data = json_data
-        self.text = json.dumps(json_data)
+        @property
+def text(self):
+    return json.dumps(self._json_data)
     
     def json(self):
         return self._json_data
@@ -34,7 +36,7 @@ def create_mock_file_content(path, content="def old_function():\n    pass", sha=
     mock_file = MagicMock()
     mock_file.path = path
     mock_file.type = "file"
-    mock_file.size = file_size or len(content)
+    mock_file.size = file_size or len(content.encode('utf-8'))
     
     # Set SHA if provided
     if sha:
@@ -65,7 +67,7 @@ def create_mock_file_from_path(file_path, sha=None):
     path_obj = Path(file_path)
     content = path_obj.read_text()
     return create_mock_file_content(
-        path=str(path_obj.name),
+        path=str(file_path),
         content=content,
         sha=sha,
         file_size=path_obj.stat().st_size
