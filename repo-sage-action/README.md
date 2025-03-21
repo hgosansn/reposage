@@ -61,7 +61,7 @@ You can also run RepoSage directly from the command line:
 python bot.py \
   --github-token YOUR_GITHUB_TOKEN \
   --open-router-api-key YOUR_OPENROUTER_API_KEY \
-  --repo owner/repo-name \
+  --repo <owner>/<repo-name> \
   --model "google/gemma-3-27b-it:free" \
   --base-branch "main" \
   --description "Focus on performance improvements" \
@@ -80,7 +80,7 @@ python bot.py \
 | `description` | Optional description of what you want RepoSage to focus on | No | - |
 | `dry_run` | Generate changes but do not create PRs | No | false |
 | `output_file` | Save changes to a JSON file for later review | No | - |
-| `max_workers` | Maximum number of parallel workers for file analysis | No | Auto (based on CPU) |
+| `max_workers` | Maximum number of parallel workers (default uses CPU core count) | No | Auto-detected |
 
 ## Advanced Usage
 
@@ -92,12 +92,12 @@ You can use the dry run mode to generate changes without creating PRs, and save 
 python bot.py \
   --github-token YOUR_GITHUB_TOKEN \
   --open-router-api-key YOUR_OPENROUTER_API_KEY \
-  --repo owner/repo-name \
+  --repo <owner>/<repo-name> \
   --dry-run \
   --output-file "changes.json"
 ```
 
-Then review the changes using the diff generator:
+Then review the changes using the diff generator (included in the repo):
 
 ```bash
 python generate_diff.py changes.json
