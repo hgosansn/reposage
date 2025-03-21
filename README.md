@@ -25,7 +25,14 @@ RepoSage leverages AI and Retrieval-Augmented Generation (RAG) to implement feat
 ### Local Execution
 
 ```sh
-python repo-sage-action/bot.py --github-token YOUR_TOKEN --repo owner/repo --open-router-api-key YOUR_API_KEY
+export GITHUB_TOKEN=xxx
+export OPEN_ROUTER_API_KEY=yyy
+python repo-sage-action/bot.py --repo owner/repo
+
+# Recommended usage with env vars:
+# git clone the repo first
+# cd repo-sage-action
+# python bot.py --repo .. <other args>
 ```
 
 You can also provide additional parameters:
@@ -61,6 +68,13 @@ To test the bot's functionality, follow these steps:
 **Run the Bot**: Once the pull request is merged, navigate to the repository's root directory and run the bot.
 
 ```sh
-python repo-sage-action/bot.py --github-token YOUR_TOKEN --repo owner/repo --open-router-api-key YOUR_API_KEY
+export GITHUB_TOKEN=xxx
+export OPEN_ROUTER_API_KEY=yyy
+python repo-sage-action/bot.py --repo owner/repo
+
+# Recommended usage with env vars:
+# git clone the repo first
+# cd repo-sage-action
+# python bot.py --repo .. <other args>
 ```
 
