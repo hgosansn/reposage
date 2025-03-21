@@ -16,7 +16,7 @@ RepoSage leverages AI and Retrieval-Augmented Generation (RAG) to implement feat
 ## Setup
 
 1. Clone the repository.
-2. Install dependencies using `pip install -r repo-sage-action/requirements.txt`.
+2. Install dependencies using `pip install -r repo-sage-action/requirements.txt`. Also set environment variables for `GITHUB_TOKEN` and `API_KEY` security.
 3. Configure the bot using the `repo-sage-action/config.yaml` file.
 4. Run the bot using `python repo-sage-action/bot.py`.
 
@@ -29,7 +29,7 @@ python repo-sage-action/bot.py \
   --github-token <GITHUB_TOKEN> \
   --repo <OWNER/REPO> \
   --api-key <API_KEY> \
-  --model qwen/qwq-32b:free
+  --model "qwen/qwq-32b:free"
 ```
 
 You can also provide additional parameters:
@@ -62,13 +62,13 @@ You can manually trigger the RepoSage action from your GitHub repository:
 
 To test the bot's functionality, follow these steps:
 
-**Run the Bot**: Once the pull request is merged, navigate to the repository's root directory and run the bot.
+**Run the Bot**: Navigate to the repository's root directory and execute the bot to analyze/improve your codebase.
 
 ```sh
 python repo-sage-action/bot.py \
   --github-token <GITHUB_TOKEN> \
   --repo <OWNER/REPO> \
   --api-key <API_KEY> \
-  --model qwen/qwq-32b:free
+  --model "qwen/qwq-32b:free"
 ```
 
