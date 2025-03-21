@@ -32,15 +32,15 @@ name: RepoSage Code Improvement
 on:
   workflow_dispatch:  # Manual trigger
   schedule:
-    - cron: '0 0 * * 0'  # Weekly on Sunday at midnight
+    - cron: '0 0 * * 0' # Runs weekly on Sunday midnight (UTC)  # Weekly on Sunday at midnight
 
 jobs:
   improve-code:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Run RepoSage
-        uses: your-username/repo-sage-action@main
+        uses: <your-username>/repo-sage-action@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           open_router_api_key: ${{ secrets.OPENROUTER_API_KEY }}
@@ -107,7 +107,7 @@ This will show you a git-style diff for each file that would be changed, allowin
 
 ### Creating Individual PRs
 
-By default, RepoSage now creates individual PRs for each file change. This makes it easier to:
+By default, RepoSage creates individual PRs for each file change This makes it easier to:
 
 1. Review changes for each file independently
 2. Merge changes selectively
