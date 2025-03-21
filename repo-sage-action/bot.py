@@ -63,12 +63,13 @@ class RepoSage:
         contents = self.repo.get_contents("")
         files = []
         
-        while contents:
-            file_content = contents.pop(0)
-            path = file_content.path
+        from collections import deque
+            contents = deque(initial_contents)
+            while contents:
+                file_content = contents.popleft()
             
             # Skip ignored directories
-            if any(ignored_dir in path for ignored_dir in IGNORED_DIRECTORIES):
+            if any(path.startswith(f'{dir}/') for dir in IGNORED_DIRECTORIES):
                 continue
                 
             if file_content.type == "dir":
@@ -254,7 +255,7 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
                     
                     # Only apply the change if the original code exists in the file
                     if original in new_content:
-                        new_content = new_content.replace(original, improved)
+                        new_content = re.sub(re.escape(original), improved, new_content)
                         changes_applied += 1
             
             if changes_applied > 0 and new_content != current_content:
