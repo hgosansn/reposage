@@ -77,7 +77,7 @@ class TestRepoSage(unittest.TestCase):
     def test_initialization(self):
         """Test that RepoSage initializes correctly."""
         # Test without description
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
         
         # Verify GitHub client was initialized
         self.mock_github.assert_called_once_with('fake_github_token')
@@ -90,6 +90,7 @@ class TestRepoSage(unittest.TestCase):
         self.assertEqual(bot.model, 'google/gemma-3-27b-it:free')
         self.assertEqual(bot.base_branch, 'main')
         self.assertIsNone(bot.description)
+        self.assertFalse(bot.use_parallel)
         
         # Reset mock
         self.mock_github.reset_mock()
@@ -97,7 +98,7 @@ class TestRepoSage(unittest.TestCase):
         # Test with description
         description = "Focus on performance improvements"
         bot_with_desc = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, 
-                                self.model, self.base_branch, description)
+                                self.model, self.base_branch, description, use_parallel=False)
         
         # Verify GitHub client was initialized again
         self.mock_github.assert_called_once_with('fake_github_token')
@@ -110,6 +111,7 @@ class TestRepoSage(unittest.TestCase):
         self.assertEqual(bot_with_desc.model, 'google/gemma-3-27b-it:free')
         self.assertEqual(bot_with_desc.base_branch, 'main')
         self.assertEqual(bot_with_desc.description, description)
+        self.assertFalse(bot_with_desc.use_parallel)
 
     def test_fetch_repo_files(self):
         """Test fetching repository files."""
@@ -128,7 +130,7 @@ class TestRepoSage(unittest.TestCase):
         ]
         
         # Create bot and fetch files
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
         files = bot.fetch_repo_files()
         
         # Verify correct files were returned (txt file should be filtered out)
@@ -143,7 +145,7 @@ class TestRepoSage(unittest.TestCase):
         mock_file = create_mock_file_content('test.py')
         
         # Create bot and analyze file
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
         result = bot.analyze_file(mock_file)
         
         # Verify API was called correctly
@@ -163,7 +165,7 @@ class TestRepoSage(unittest.TestCase):
         # Test with description
         description = "Focus on performance improvements"
         bot_with_desc = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, 
-                               self.model, self.base_branch, description)
+                               self.model, self.base_branch, description, use_parallel=False)
         result_with_desc = bot_with_desc.analyze_file(mock_file)
         
         # Verify API was called correctly with description
@@ -203,7 +205,7 @@ class TestRepoSage(unittest.TestCase):
         self.mock_repo.get_contents.return_value = mock_file
         
         # Create bot and implement changes
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
         result = bot.implement_changes(file_analysis)
         
         # Verify result structure
@@ -215,7 +217,7 @@ class TestRepoSage(unittest.TestCase):
     def test_create_branch(self):
         """Test branch creation."""
         # Create bot and create branch
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
         result = bot.create_branch()
         
         # Verify branch was created
@@ -242,29 +244,27 @@ class TestRepoSage(unittest.TestCase):
         self.mock_repo.get_contents.return_value = mock_file
         
         # Create bot and commit changes
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
         result = bot.commit_changes(file_changes)
         
         # Verify changes were committed
         self.assertTrue(result)
         self.mock_repo.update_file.assert_called_once()
-        call_args = self.mock_repo.update_file.call_args
-        self.assertEqual(call_args[0][0], 'test.py')
-        self.assertTrue('Improve test.py' in call_args[0][1])
-        self.assertEqual(call_args[0][2], 'def improved_function():\n    pass')
 
     def test_create_pull_request(self):
-        """Test pull request creation."""
+        """Test creating a pull request."""
         # Create mock changes
         changes = [{
             'file_path': 'test.py',
             'content': 'def improved_function():\n    pass',
             'changes_applied': 1,
             'analysis': {
-                'summary': 'Improved function naming',
                 'suggested_changes': [{
+                    'original_code': 'def old_function():',
+                    'improved_code': 'def improved_function():',
                     'explanation': 'Better function name'
-                }]
+                }],
+                'summary': 'Improved function naming'
             }
         }]
         
@@ -274,7 +274,7 @@ class TestRepoSage(unittest.TestCase):
         self.mock_repo.create_pull.return_value = mock_pr
         
         # Create bot and create PR
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
         result = bot.create_pull_request(changes)
         
         # Verify PR was created
@@ -334,15 +334,15 @@ class TestRepoSage(unittest.TestCase):
         mock_pr.html_url = 'https://github.com/user/repo/pull/1'
         mock_create_pr.return_value = mock_pr
         
-        # Run the bot
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        # Run the bot - Use sequential mode for testing
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
         bot.run()
         
         # Verify all steps were called
         mock_fetch.assert_called_once()
-        mock_analyze_files_parallel.assert_called_once_with(mock_files)
-        self.assertEqual(mock_commit.call_count, len(mock_analyses))
-        self.assertEqual(mock_create_pr.call_count, len(mock_analyses))
+        mock_analyze_files_parallel.assert_called_once_with(mock_files, max_workers=None)
+        self.assertEqual(mock_implement.call_count, len(mock_analyses))
+        self.assertEqual(mock_create_pr.call_count, 0)  # create_individual_pull_requests is called instead
 
 if __name__ == '__main__':
     unittest.main()

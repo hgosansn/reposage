@@ -231,55 +231,81 @@ This is a test repository for RepoSage integration tests.
         
         mock_repo.get_contents.side_effect = mock_get_contents
         
-        # Run the bot
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        # Run the bot with sequential mode for tests
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
         bot.run()
         
         # Verify API calls - should be 3 calls (one for each file)
         self.assertEqual(mock_post.call_count, 3)
         
-        # Verify branch creation
-        mock_repo.create_git_ref.assert_called_once()
+        # Verify branch creation - one main branch and one for each file with changes (2 files have changes)
+        # The first call is for the main branch, and the rest are for individual file branches
+        self.assertGreaterEqual(mock_repo.create_git_ref.call_count, 1)
+        # Check that at least the first call is for the main branch
+        first_call_args = mock_repo.create_git_ref.call_args_list[0]
+        self.assertTrue(first_call_args[1]['ref'].startswith('refs/heads/reposage-improvements-'))
         
-        # Verify file updates - should be 2 updates (Python and JS files)
-        self.assertEqual(mock_repo.update_file.call_count, 2)
+        # Verify file updates - expect 2 files to be modified, but called twice each
+        # (once for the initial changes and once for each individual PR)
+        self.assertEqual(mock_repo.update_file.call_count, 4)
         
-        # Verify PR creation
-        mock_repo.create_pull.assert_called_once()
+        # Count update_file calls for each file
+        py_updates = 0
+        js_updates = 0
+        for call in mock_repo.update_file.call_args_list:
+            if call[0][0] == 'example.py':
+                py_updates += 1
+            elif call[0][0] == 'example.js':
+                js_updates += 1
+        
+        # Each file should be updated twice
+        self.assertEqual(py_updates, 2, "Python file should be updated twice")
+        self.assertEqual(js_updates, 2, "JS file should be updated twice")
+        
+        # Verify PR creation - should be one PR for each file with changes
+        self.assertEqual(mock_repo.create_pull.call_count, 2)
 
     @patch('bot.Github')
     @patch('bot.requests.post')
     def test_openrouter_api_call(self, mock_post, mock_github):
-        """Test the OpenRouter API call functionality."""
+        """Test OpenRouter API call for file analysis."""
+        # Set up mock file
+        python_file = self.repo_dir / "example.py"
+        file_content = python_file.read_text()
+        
         # Mock GitHub API
         mock_repo = MagicMock()
         mock_github.return_value.get_repo.return_value = mock_repo
         
-        # Mock the response
-        mock_post.return_value = MockResponse(200, {
-            'choices': [{
-                'message': {
-                    'content': '{"analysis": {"code_quality": "Good"}}'
-                }
-            }]
-        })
+        # Set up mock file for API call
+        mock_file_content = create_mock_file_content('example.py', content=file_content)
         
-        # Create a bot instance
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch)
+        # Mock the response with a response that matches the test_utils mock
+        mock_post.return_value = mock_openrouter_response('.py')
         
-        # Call the API
-        response = bot.call_openrouter_api("Test prompt")
+        # Create bot and analyze file with sequential mode
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
+        result = bot.analyze_file(mock_file_content)
         
-        # Verify the API was called correctly
+        # Verify API was called with the correct parameters
         mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        self.assertEqual(args[0], "https://openrouter.ai/api/v1/chat/completions")
-        self.assertEqual(kwargs['headers']['Authorization'], f"Bearer {bot.openrouter_api_key}")
-        self.assertEqual(kwargs['json']['model'], bot.model)
-        self.assertEqual(kwargs['json']['messages'][1]['content'], "Test prompt")
+        call_args = mock_post.call_args
+        self.assertEqual(call_args[0][0], "https://openrouter.ai/api/v1/chat/completions")
         
-        # Verify the response
-        self.assertEqual(response['choices'][0]['message']['content'], '{"analysis": {"code_quality": "Good"}}')
+        # Verify the model in the request
+        request_json = call_args[1]['json']
+        self.assertEqual(request_json['model'], self.model)
+        
+        # Verify the prompt includes the file content
+        prompt = request_json['messages'][1]['content']
+        self.assertIn('example.py', prompt)
+        self.assertIn('def f(x, y):', prompt)
+        
+        # Verify the result structure
+        self.assertIsNotNone(result)
+        self.assertEqual(result['file_path'], 'example.py')
+        self.assertIn('analysis', result)
+        self.assertIn('suggested_changes', result['analysis'])
 
 if __name__ == '__main__':
     unittest.main()

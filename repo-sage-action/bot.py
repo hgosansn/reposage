@@ -29,13 +29,14 @@ MAX_TOKENS = 4096
 DEFAULT_MODEL = "qwen/qwq-32b:free"
 
 class RepoSage:
-    def __init__(self, github_token, repo_name, openrouter_api_key, model=DEFAULT_MODEL, base_branch='main', description=None):
+    def __init__(self, github_token, repo_name, openrouter_api_key, model=DEFAULT_MODEL, base_branch='main', description=None, use_parallel=True):
         self.github_token = github_token
         self.repo_name = repo_name
         self.openrouter_api_key = openrouter_api_key
         self.model = model
         self.base_branch = base_branch
         self.description = description
+        self.use_parallel = use_parallel
 
         # log the first 5 characters of the github token
         logger.info(f"Initialized RepoSage for repository: {self.repo_name} with github token: {self.github_token[:5]}******")
@@ -365,9 +366,28 @@ Make sure your suggestions are concrete, specific, and would genuinely improve t
         Returns:
             List of file analysis results
         """
-        logger.info(f"Starting parallel analysis of {len(files)} files...")
+        logger.info(f"Starting analysis of {len(files)} files...")
         results = []
         
+        # Sequential analysis when use_parallel is False (for tests)
+        if not self.use_parallel:
+            logger.info("Using sequential analysis (parallel processing disabled)")
+            for file_content in files:
+                try:
+                    result = self.analyze_file(file_content)
+                    if result:
+                        results.append(result)
+                        logger.info(f"Completed analysis of {result['file_path']}")
+                    else:
+                        logger.warning(f"Analysis failed for {file_content.path}")
+                except Exception as e:
+                    logger.error(f"Exception analyzing {file_content.path}: {str(e)}")
+            
+            logger.info(f"Sequential analysis complete. {len(results)} files analyzed successfully.")
+            return results
+        
+        # Parallel analysis using thread pool
+        logger.info("Using parallel analysis with thread pool")
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all file analysis tasks
             future_to_file = {executor.submit(self.analyze_file, file_content): file_content for file_content in files}
@@ -554,6 +574,7 @@ def main():
         parser.add_argument('--dry-run', action='store_true', help='Generate changes but do not create PRs')
         parser.add_argument('--output-file', help='Save changes to a JSON file for later review')
         parser.add_argument('--max-workers', type=int, help='Maximum number of parallel workers for file analysis')
+        parser.add_argument('--sequential', action='store_true', help='Run analysis sequentially instead of in parallel (useful for testing)')
         
         # Parse arguments
         args = parser.parse_args()
@@ -565,7 +586,8 @@ def main():
             openrouter_api_key=args.openrouter_api_key,
             model=args.model,
             base_branch=args.base_branch,
-            description=args.description
+            description=args.description,
+            use_parallel=not args.sequential
         )
         
         # Run the bot with additional options
