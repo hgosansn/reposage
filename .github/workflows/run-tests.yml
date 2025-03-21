@@ -1,0 +1,45 @@
+name: Run Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+    
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.8'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r repo-sage-action/requirements.txt
+        # Install any additional test dependencies
+        pip install pytest pytest-cov
+    
+    - name: Run tests
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        OPENROUTER_API_KEY: "test_openrouter_api_key"  # Mock API key for tests
+      run: |
+        # Run unit tests
+        python -m unittest discover tests
+    
+    - name: Check code style
+      run: |
+        # Install code style tools
+        pip install pylint black
+        # Run black to check formatting (in check mode only, doesn't modify files)
+        black --check repo-sage-action tests
+        # Run basic pylint checks
+        pylint --disable=all --enable=unused-import,undefined-variable,unused-variable,f-string-without-interpolation,trailing-whitespace repo-sage-action tests 
