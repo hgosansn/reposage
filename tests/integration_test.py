@@ -56,16 +56,16 @@ class IntegrationTestRepoSage(unittest.TestCase):
         """Create test files in the repository."""
         # Create a Python file with some issues
         python_file = cls.repo_dir / "example.py"
-        python_file.write_text("""
-def add(a, b):
-    # This function adds two numbers
-    return a+b
+        python_file.write_text(textwrap.dedent('''
+    def add(a, b):
+        # This function adds two numbers
+        return a + b
 
-# Function with poor naming and no docstring
-def f(x, y):
-    z = x * y
-    return z
-        """)
+    # Function with poor naming and no docstring
+    def f(x, y):
+        z = x * y
+        return z
+'''))
         
         # Create a JavaScript file with some issues
         js_file = cls.repo_dir / "example.js"
