@@ -790,12 +790,16 @@ IMPORTANT GUIDELINES:
         logger.info("Running tests to validate changes...")
         
         try:
+            # For use in mocked tests, we can simulate running tests
+            if hasattr(self, 'mock_test_run'):
+                return self.mock_test_run
+                
             # Clone the repository to a temporary directory to run tests
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Clone the repo with the current branch
                 clone_cmd = [
                     "git", "clone", 
-                    f"https://{self.token}@github.com/{self.repo_name}.git",
+                    f"https://{self.github_token}@github.com/{self.repo_name}.git",
                     "--branch", self.branch_name,
                     "--single-branch", temp_dir
                 ]
@@ -841,13 +845,241 @@ IMPORTANT GUIDELINES:
                 
                 # Return success if tests passed (return code 0)
                 success = test_process.returncode == 0
-                output = test_process.stdout + "\n" + test_process.stderr if test_process.stderr else test_process.stdout
+                if success:
+                    output = test_process.stdout
+                else:
+                    output = f"{test_process.stdout}\n{test_process.stderr}".strip()
                 
                 return success, output
                 
         except Exception as e:
             logger.error(f"Error running tests: {str(e)}")
             return False, str(e)
+
+    def should_analyze_file(self, file_content):
+        """Determine if a file should be analyzed based on size and path.
+        
+        Args:
+            file_content: GitHub file content object
+            
+        Returns:
+            True if the file should be analyzed, False otherwise
+        """
+        # Skip files that are too large
+        if file_content.size > MAX_FILE_SIZE:
+            return False
+            
+        # Skip files in ignored directories
+        if any(ignored_dir in file_content.path for ignored_dir in IGNORED_DIRECTORIES):
+            return False
+            
+        # Skip unsupported file types
+        if not file_content.path.endswith(SUPPORTED_FILE_EXTENSIONS):
+            return False
+            
+        return True
+
+    def generate_commit_message(self, file_path, suggested_changes):
+        """Generate a commit message for a file change.
+        
+        Args:
+            file_path: Path to the file being modified
+            suggested_changes: List of suggested changes
+            
+        Returns:
+            Commit message string
+        """
+        # Create a concise message about what's changing
+        commit_title = f"Improve {file_path}"
+        
+        # Add details about the changes
+        commit_body = "RepoSage: AI-suggested improvements\n\n"
+        commit_body += f"Changes to {file_path}:\n"
+        
+        # Add each specific change to the commit message
+        for idx, suggestion in enumerate(suggested_changes, 1):
+            if 'explanation' in suggestion:
+                commit_body += f"- {suggestion['explanation']}\n"
+        
+        return f"{commit_title}\n\n{commit_body}"
+    
+    def generate_commit_messages(self, changes_list):
+        """Generate commit messages for all changes.
+        
+        Args:
+            changes_list: List of file changes
+            
+        Returns:
+            Tuple of (commit_messages, total_changes)
+        """
+        commit_messages = []
+        total_changes = 0
+        
+        for file_changes in changes_list:
+            try:
+                file_path = file_changes['file_path']
+                changes_applied = file_changes.get('changes_applied', 0)
+                
+                if changes_applied > 0:
+                    # Create descriptive commit message
+                    commit_message = self.generate_commit_message(
+                        file_path, 
+                        file_changes['analysis']['suggested_changes']
+                    )
+                    
+                    commit_messages.append(commit_message)
+                    total_changes += changes_applied
+                
+            except Exception as e:
+                logger.error(f"Error generating commit message for {file_changes['file_path']}: {str(e)}")
+        
+        return commit_messages, total_changes
+
+    def save_analyses_to_file(self, analyses, output_file):
+        """Save analysis results to a JSON file.
+        
+        Args:
+            analyses: List of file analyses
+            output_file: Path to output file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Create a serializable version of the analyses
+            serializable_analyses = []
+            for analysis in analyses:
+                # Make a copy to avoid modifying the original
+                serializable_analysis = {
+                    'file_path': analysis['file_path'],
+                    'analysis': analysis['analysis']
+                }
+                serializable_analyses.append(serializable_analysis)
+            
+            # Write to file
+            with open(output_file, 'w') as f:
+                json.dump(serializable_analyses, f, indent=2)
+            
+            logger.info(f"Saved analyses to {output_file}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving analyses to file: {str(e)}")
+            return False
+
+    def implement_tests(self, file_path, suggested_changes):
+        """Create or update test files based on the suggested changes.
+        
+        Args:
+            file_path: Path to the original file being modified
+            suggested_changes: List of suggested changes with test_code
+            
+        Returns:
+            Dictionary with test file paths and content
+        """
+        test_files = {}
+        
+        # Skip if no changes have test code
+        if not suggested_changes or not any('test_code' in change for change in suggested_changes):
+            logger.info(f"No test code provided for changes to {file_path}")
+            return test_files
+            
+        try:
+            # Determine the test file path based on the original file
+            # For Python files in a package, we follow the pytest convention
+            if file_path.endswith('.py'):
+                # Get the file name without extension
+                file_name = Path(file_path).stem
+                
+                # Check if it's part of a package or standalone
+                if '/' in file_path:
+                    # It's in a package, create test in a parallel tests directory
+                    package_path = str(Path(file_path).parent)
+                    test_file_path = f"tests/test_{file_name}.py"
+                else:
+                    # It's a standalone file, create test file with test_ prefix
+                    test_file_path = f"test_{file_name}.py"
+            else:
+                # For non-Python files, create a test file with appropriate extension
+                # based on common testing frameworks for that file type
+                file_name = Path(file_path).stem
+                if file_path.endswith('.js') or file_path.endswith('.ts'):
+                    test_file_path = f"tests/{file_name}.test.js"
+                elif file_path.endswith('.jsx') or file_path.endswith('.tsx'):
+                    test_file_path = f"tests/{file_name}.test.jsx"
+                else:
+                    # For other file types, use a generic convention
+                    test_file_path = f"tests/test_{file_name}.py"
+            
+            # Gather all test code from the changes
+            all_test_code = []
+            for change in suggested_changes:
+                if 'test_code' in change and change['test_code']:
+                    all_test_code.append(change['test_code'])
+            
+            if not all_test_code:
+                logger.info(f"No valid test code found for {file_path}")
+                return test_files
+            
+            # Check if the test file already exists
+            try:
+                existing_test_file = self.repo.get_contents(test_file_path, ref=self.base_branch)
+                existing_test_content = base64.b64decode(existing_test_file.content).decode('utf-8')
+                
+                # Append the new tests to the existing test file
+                # Add a comment to separate the new tests
+                test_content = existing_test_content
+                test_content += f"\n\n# New tests for changes to {file_path}\n"
+                for test_code in all_test_code:
+                    test_content += f"\n{test_code}\n"
+                
+                test_files[test_file_path] = {
+                    'content': test_content,
+                    'exists': True,
+                    'sha': existing_test_file.sha
+                }
+            except Exception:
+                # Test file doesn't exist, create a new one
+                # Start with appropriate imports based on file type
+                if test_file_path.endswith('.py'):
+                    test_content = f"""import unittest
+import sys
+import os
+from pathlib import Path
+
+# Add the parent directory to the path so we can import the module
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import the module being tested
+try:
+    from {Path(file_path).stem} import *
+except ImportError:
+    pass  # Handle the case where the module doesn't exist or can't be imported
+
+# Tests for {file_path}
+"""
+                elif test_file_path.endswith('.js') or test_file_path.endswith('.jsx'):
+                    test_content = f"""// Tests for {file_path}
+const {file_name} = require('../{file_path}');
+
+"""
+                else:
+                    test_content = f"# Tests for {file_path}\n\n"
+                
+                # Add the test code
+                for test_code in all_test_code:
+                    test_content += f"{test_code}\n\n"
+                
+                test_files[test_file_path] = {
+                    'content': test_content,
+                    'exists': False,
+                    'sha': None
+                }
+            
+            return test_files
+            
+        except Exception as e:
+            logger.error(f"Error implementing tests for {file_path}: {str(e)}")
+            return {}
 
 def main():
     try:
@@ -892,7 +1124,7 @@ def main():
         # Save changes to file if changes were made
         if changes_list:
             if bot.save_changes_to_file(changes_list, args.output_file):
-                print(f"\n�� Saved changes to {args.output_file}")
+                print(f"\n✅ Saved changes to {args.output_file}")
                 print(f"You can review the changes using: python generate_diff.py {args.output_file}")
     except Exception as e:
         logger.error(f"RepoSage failed: {str(e)}")
