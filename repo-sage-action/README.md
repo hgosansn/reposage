@@ -38,9 +38,9 @@ jobs:
   improve-code:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Run RepoSage
-        uses: your-username/repo-sage-action@main
+        uses: <your-username>/repo-sage-action@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           open_router_api_key: ${{ secrets.OPENROUTER_API_KEY }}
