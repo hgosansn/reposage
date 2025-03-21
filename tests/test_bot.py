@@ -332,7 +332,7 @@ class TestRepoSage(unittest.TestCase):
         # Set up mock PR
         mock_pr = MagicMock()
         mock_pr.html_url = 'https://github.com/user/repo/pull/1'
-        mock_create_pr.return_value = mock_pr
+        mock_create_individual_pull_requests.return_value = mock_pr
         
         # Run the bot - Use sequential mode for testing
         bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
