@@ -480,6 +480,72 @@ class TestRepoSage(unittest.TestCase):
         # Check that the tests failed
         self.assertFalse(success)
         self.assertEqual(output, "Test failed\nError in test")
+        
+    def test_changelog_functionality(self):
+        """Test the changelog functionality"""
+        # Mock the changelog file
+        mock_changelog = MagicMock()
+        mock_changelog.content = base64.b64encode("""# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+""".encode('utf-8'))
+        mock_changelog.sha = "fake_sha"
+        
+        # Test reading an existing changelog
+        with patch.object(self.bot.repo, 'get_contents', return_value=mock_changelog):
+            changelog_content = self.bot.read_changelog()
+            self.assertIn("# Changelog", changelog_content)
+            self.assertIn("## [Unreleased]", changelog_content)
+        
+        # Test creating a changelog when it doesn't exist
+        with patch.object(self.bot.repo, 'get_contents', side_effect=Exception("File not found")):
+            with patch.object(self.bot.repo, 'create_file', return_value=None) as mock_create:
+                # Set direct_commit for proper branch selection
+                self.bot.direct_commit = True
+                changelog_content = self.bot.read_changelog()
+                self.assertIn("# Changelog", changelog_content)
+                self.assertIn("## [Unreleased]", changelog_content)
+                mock_create.assert_called_once()
+        
+        # Test updating the changelog
+        changes_list = [{
+            'file_path': 'test.py',
+            'content': 'def improved_function():\n    pass',
+            'changes_applied': 1,
+            'analysis': {
+                'suggested_changes': [{
+                    'original_code': 'def old_function():',
+                    'improved_code': 'def improved_function():',
+                    'explanation': 'Better function name'
+                }],
+                'summary': 'Improved function naming'
+            }
+        }]
+        
+        with patch.object(self.bot, 'read_changelog', return_value=mock_changelog.content.decode('utf-8')):
+            with patch.object(self.bot.repo, 'get_contents', return_value=mock_changelog):
+                with patch.object(self.bot.repo, 'update_file', return_value=None) as mock_update:
+                    # Test updating with changes
+                    success, message = self.bot.update_changelog(changes_list, dry_run=False)
+                    self.assertTrue(success)
+                    self.assertIn("Updated changelog", message)
+                    mock_update.assert_called_once()
+                    
+                    # Get the updated content that was passed to update_file
+                    updated_content = mock_update.call_args[0][2]
+                    self.assertIn("test.py: Better function name", updated_content)
 
 if __name__ == '__main__':
     unittest.main()

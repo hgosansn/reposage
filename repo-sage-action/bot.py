@@ -104,6 +104,19 @@ class RepoSage:
             # This helps prevent unterminated string errors
             sanitized_content = json.dumps(file_content_str)[1:-1]  # Remove outer quotes from JSON string
             
+            # Get changelog content for context
+            try:
+                changelog_content = self.read_changelog()
+                logger.info("Including changelog in analysis context")
+            except Exception as e:
+                changelog_content = ""
+                logger.warning(f"Could not read changelog for context: {str(e)}")
+            
+            # Prepare changelog section if available
+            changelog_section = ""
+            if changelog_content:
+                changelog_section = "## Project Changelog and Development History\n\nBelow is the project's changelog showing previous changes and improvements. Use this as context when suggesting new improvements to ensure they build upon previous work.\n\n" + changelog_content
+            
             # Prepare the prompt for the AI model
             prompt = f"""You are RepoSage, an AI assistant specialized in code analysis and self-improvement.
 
@@ -118,6 +131,8 @@ File content:
 ```
 
 {f'Focus on the following aspects: {self.description}' if self.description else ''}
+
+{changelog_section}
 
 Provide your analysis in the following JSON format:
 {{
@@ -145,6 +160,7 @@ IMPORTANT GUIDELINES:
 4. The tests should be comprehensive and follow best practices for the language.
 5. If modifying existing functionality, ensure tests verify the functionality still works as expected.
 6. If this is your own code, consider how you could improve yourself to be more effective.
+7. Review the changelog to ensure your suggestions build upon previous improvements and don't conflict with them.
 """
 
             # Call OpenRouter API
@@ -221,7 +237,7 @@ IMPORTANT GUIDELINES:
         data = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are RepoSage, an expert code analyzer that suggests concrete improvements to codebases, including your own. Always include tests for any changes you suggest, and consider how you could improve your own code."},
+                {"role": "system", "content": "You are RepoSage, an expert code analyzer that suggests concrete improvements to codebases, including your own. Always include tests for any changes you suggest, and consider how you could improve your own code. Each change you suggest should build upon previous improvements documented in the project's changelog."},
                 {"role": "user", "content": prompt}
             ],
             "max_tokens": MAX_TOKENS
@@ -612,6 +628,14 @@ IMPORTANT GUIDELINES:
                     return False, f"Tests failed: {test_output}"
                 logger.info("Tests passed successfully!")
             
+            # Make sure the changelog is updated
+            # This adds redundancy in case the update in run() fails
+            changelog_success, changelog_message = self.update_changelog(changes_list, dry_run=False)
+            if changelog_success:
+                logger.info(f"Changelog updated: {changelog_message}")
+            else:
+                logger.warning(f"Could not update changelog: {changelog_message}")
+            
             # Apply each change directly to the base branch
             success_count = 0
             for change in changes_list:
@@ -694,6 +718,8 @@ IMPORTANT GUIDELINES:
         
         # Initialize variables
         changes_list = []
+        self.dry_run = dry_run
+        self.direct_commit = direct_commit
         
         # Get a list of all accessible files in the repository
         all_files = self.fetch_repo_files()
@@ -747,6 +773,12 @@ IMPORTANT GUIDELINES:
                     file_changes = self.implement_changes(file_analysis, dry_run=dry_run)
                     if file_changes:
                         changes_list.append(file_changes)
+        
+        # Update changelog with the changes
+        if changes_list:
+            logger.info("Updating changelog with the implemented changes")
+            changelog_success, changelog_message = self.update_changelog(changes_list, dry_run=dry_run)
+            logger.info(f"Changelog update: {changelog_message}")
         
         # Create PR or commit directly
         if changes_list and not dry_run:
@@ -965,6 +997,193 @@ IMPORTANT GUIDELINES:
         except Exception as e:
             logger.error(f"Error saving analyses to file: {str(e)}")
             return False
+
+    def read_changelog(self):
+        """Read the existing changelog file or create it if it doesn't exist.
+        
+        Returns:
+            The content of the changelog file
+        """
+        changelog_path = "CHANGELOG.md"
+        try:
+            # Try to get the existing changelog
+            file_content = self.repo.get_contents(changelog_path, ref=self.base_branch)
+            content = base64.b64decode(file_content.content).decode('utf-8')
+            logger.info(f"Read existing changelog: {len(content)} characters")
+            return content
+        except Exception as e:
+            # Changelog doesn't exist yet or couldn't be read
+            logger.info(f"Changelog not found or couldn't be read: {str(e)}")
+            
+            # Create a default changelog
+            default_content = """# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+"""
+            # If we're not in dry run mode, create the file
+            if not hasattr(self, 'dry_run') or not self.dry_run:
+                try:
+                    # Check if we're using direct commits or PRs
+                    branch = self.base_branch if hasattr(self, 'direct_commit') and self.direct_commit else self.branch_name
+                    
+                    # Create the file
+                    self.repo.create_file(
+                        changelog_path,
+                        "Create changelog",
+                        default_content,
+                        branch=branch
+                    )
+                    logger.info(f"Created new changelog file in {branch}")
+                except Exception as create_err:
+                    logger.warning(f"Failed to create changelog: {str(create_err)}")
+                    
+            return default_content
+
+    def update_changelog(self, changes_list, dry_run=False):
+        """Update the changelog with the latest changes.
+        
+        Args:
+            changes_list: List of changes to document
+            dry_run: If True, don't actually update the changelog
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        if not changes_list:
+            logger.info("No changes to add to changelog")
+            return False, "No changes to add to changelog"
+            
+        try:
+            # Read the current changelog
+            current_changelog = self.read_changelog()
+            
+            # Format date for entry
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            # Prepare new changelog entries
+            new_entries = {
+                "added": [],
+                "changed": [],
+                "fixed": []
+            }
+            
+            # Process each change and categorize them
+            for change in changes_list:
+                file_path = change['file_path']
+                
+                if 'analysis' in change and 'suggested_changes' in change['analysis']:
+                    for suggestion in change['analysis']['suggested_changes']:
+                        if 'explanation' in suggestion:
+                            # Categorize based on keywords in the explanation
+                            explanation = suggestion['explanation']
+                            entry = f"- {file_path}: {explanation}"
+                            
+                            if any(word in explanation.lower() for word in ['fix', 'bug', 'issue', 'error', 'crash']):
+                                new_entries["fixed"].append(entry)
+                            elif any(word in explanation.lower() for word in ['add', 'new', 'implement', 'create']):
+                                new_entries["added"].append(entry)
+                            else:
+                                new_entries["changed"].append(entry)
+            
+            # Create the new changelog content
+            new_content = f"## [{today}]\n\n"
+            
+            has_entries = False
+            
+            if new_entries["added"]:
+                new_content += "### Added\n\n"
+                for entry in new_entries["added"]:
+                    new_content += f"{entry}\n"
+                new_content += "\n"
+                has_entries = True
+                
+            if new_entries["changed"]:
+                new_content += "### Changed\n\n"
+                for entry in new_entries["changed"]:
+                    new_content += f"{entry}\n"
+                new_content += "\n"
+                has_entries = True
+                
+            if new_entries["fixed"]:
+                new_content += "### Fixed\n\n"
+                for entry in new_entries["fixed"]:
+                    new_content += f"{entry}\n"
+                new_content += "\n"
+                has_entries = True
+            
+            if not has_entries:
+                logger.info("No significant changes to add to changelog")
+                return False, "No significant changes to add to changelog"
+            
+            # Insert the new content after the Unreleased section
+            unreleased_pattern = r"## \[Unreleased\].*?(?=##|\Z)"
+            match = re.search(unreleased_pattern, current_changelog, re.DOTALL)
+            
+            if match:
+                unreleased_section = match.group(0)
+                insert_pos = match.end()
+                updated_changelog = current_changelog[:insert_pos] + new_content + current_changelog[insert_pos:]
+            else:
+                # If no Unreleased section is found, add at the beginning
+                updated_changelog = f"# Changelog\n\n## [Unreleased]\n\n## [{today}]\n\n" + new_content + current_changelog
+            
+            if dry_run:
+                logger.info("Dry run: would update changelog")
+                return True, "Dry run: would update changelog"
+                
+            # Update the changelog file
+            changelog_path = "CHANGELOG.md"
+            try:
+                # Get the current file
+                file_content = self.repo.get_contents(changelog_path, ref=self.base_branch)
+                
+                # The branch to commit to depends on the mode
+                branch = self.base_branch if hasattr(self, 'direct_commit') and self.direct_commit else self.branch_name
+                
+                # Update the file
+                self.repo.update_file(
+                    changelog_path,
+                    f"Update changelog with changes from {today}",
+                    updated_changelog,
+                    file_content.sha,
+                    branch=branch
+                )
+                logger.info(f"Updated changelog in {branch}")
+                return True, f"Updated changelog with changes from {today}"
+            except Exception as e:
+                # If the file doesn't exist, create it
+                if "not found" in str(e).lower():
+                    try:
+                        branch = self.base_branch if hasattr(self, 'direct_commit') and self.direct_commit else self.branch_name
+                        self.repo.create_file(
+                            changelog_path,
+                            f"Create changelog with changes from {today}",
+                            updated_changelog,
+                            branch=branch
+                        )
+                        logger.info(f"Created changelog in {branch}")
+                        return True, f"Created changelog with changes from {today}"
+                    except Exception as create_err:
+                        logger.error(f"Failed to create changelog: {str(create_err)}")
+                        return False, f"Failed to create changelog: {str(create_err)}"
+                logger.error(f"Failed to update changelog: {str(e)}")
+                return False, f"Failed to update changelog: {str(e)}"
+                
+        except Exception as e:
+            logger.error(f"Error updating changelog: {str(e)}")
+            return False, f"Error updating changelog: {str(e)}"
 
     def implement_tests(self, file_path, suggested_changes):
         """Create or update test files based on the suggested changes.
