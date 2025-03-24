@@ -2,7 +2,7 @@
 
 ![Logo](resources/reposage.png)
 
-[![Tests](https://github.com/kodingtulen/reposage/actions/workflows/run-tests.yml/badge.svg)](https://github.com/kodingtulen/reposage/actions/workflows/run-tests.yml)
+[![Tests](https://github.com/hgosansn/reposage/actions/workflows/repo-sage.yml/badge.svg)](https://github.com/hgosansn/reposage/actions/workflows/repo-sage.yml)
 
 RepoSage leverages AI and Retrieval-Augmented Generation (RAG) to implement features/fix bugs and makes changes on a repository.
 
