@@ -119,11 +119,13 @@ This is a test repository for RepoSage integration tests.
                             'suggested_changes': [{
                                 'original_code': 'def f(x, y):',
                                 'improved_code': 'def multiply(x, y):',
-                                'explanation': 'Improved function name to be more descriptive'
+                                'explanation': 'Improved function name to be more descriptive',
+                                'test_code': 'def test_multiply():\n    assert multiply(2, 3) == 6'
                             }, {
                                 'original_code': '    z = x * y\n    return z',
                                 'improved_code': '    """Multiply two numbers and return the result."""\n    return x * y',
-                                'explanation': 'Added docstring and simplified the function'
+                                'explanation': 'Added docstring and simplified the function',
+                                'test_code': 'def test_multiply_docstring():\n    import inspect\n    assert "Multiply two numbers" in inspect.getdoc(multiply)'
                             }],
                             'summary': 'Improved function naming and documentation'
                         })
@@ -144,11 +146,13 @@ This is a test repository for RepoSage integration tests.
                             'suggested_changes': [{
                                 'original_code': 'function calc(a, b) {',
                                 'improved_code': '/**\n * Multiplies two numbers\n * @param {number} a - First number\n * @param {number} b - Second number\n * @returns {number} - Product of a and b\n */\nfunction multiply(a, b) {',
-                                'explanation': 'Improved function name and added JSDoc'
+                                'explanation': 'Improved function name and added JSDoc',
+                                'test_code': 'test("multiply function works", () => {\n  expect(multiply(2, 3)).toBe(6);\n});'
                             }, {
                                 'original_code': 'let result = 0;\nresult = calc(5, 10);',
                                 'improved_code': 'const result = multiply(5, 10);',
-                                'explanation': 'Removed unnecessary variable reassignment and used const'
+                                'explanation': 'Removed unnecessary variable reassignment and used const',
+                                'test_code': 'test("result is calculated properly", () => {\n  expect(result).toBe(50);\n});'
                             }],
                             'summary': 'Improved function naming, documentation, and variable usage'
                         })
@@ -156,18 +160,24 @@ This is a test repository for RepoSage integration tests.
                 }]
             })
         else:
+            # Even for README and other files, return some suggested changes
             return MockResponse(200, {
                 'choices': [{
                     'message': {
                         'content': json.dumps({
                             'analysis': {
-                                'code_quality': 'No issues found.',
-                                'best_practices': 'Follows best practices.',
-                                'potential_bugs': 'No potential bugs found.',
-                                'performance': 'No performance issues found.'
+                                'code_quality': 'Content could be improved.',
+                                'best_practices': 'More details would be helpful.',
+                                'potential_bugs': 'No issues found.',
+                                'performance': 'No performance concerns.'
                             },
-                            'suggested_changes': [],
-                            'summary': 'No improvements needed'
+                            'suggested_changes': [{
+                                'original_code': '# Test Repository',
+                                'improved_code': '# RepoSage Test Repository',
+                                'explanation': 'Added more specific title',
+                                'test_code': '# No test needed for markdown'
+                            }],
+                            'summary': 'Improved documentation clarity'
                         })
                     }
                 }]
@@ -201,42 +211,125 @@ This is a test repository for RepoSage integration tests.
             elif '.md' in prompt:
                 file_ext = '.md'
             
-            return mock_openrouter_response(file_ext)
+            print(f"DEBUG: OpenRouter API called for a file with extension: {file_ext}")
+            response = self._mock_openrouter_response(file_ext)
+            
+            # Debug print the response
+            response_content = response.json()['choices'][0]['message']['content']
+            print(f"DEBUG: OpenRouter API response: {response_content[:100]}...")
+            
+            return response
         
         mock_post.side_effect = mock_post_response
         
         # Create mock file contents for the repository using the shared utility function
         def mock_get_contents(path, ref=None):
+            print(f"DEBUG: get_contents called for path: {path}, ref: {ref}")
+            
             if path == 'example.py':
                 # Create a Python file with content that matches the suggested changes
-                python_content = "def f(x, y):\n    return x * y"
-                return create_mock_file_content('example.py', content=python_content, sha='py_file_sha')
+                python_content = "def f(x, y):\n    z = x * y\n    return z"
+                print(f"DEBUG: Python file content: '{python_content}'")
+                mock_file = create_mock_file_content('example.py', content=python_content)
+                mock_file.sha = 'python_file_sha'  # Add SHA attribute
+                return mock_file
             elif path == 'example.js':
                 # Create a JS file with content that matches the suggested changes
-                js_content = "function calc(a, b) {\n    return a * b;\n}"
-                return create_mock_file_content('example.js', content=js_content, sha='js_file_sha')
+                js_content = "function calc(a, b) {\n    return a * b;\n}\n\nlet result = 0;\nresult = calc(5, 10);\nconsole.log(result);"
+                print(f"DEBUG: JS file content: '{js_content}'")
+                mock_file = create_mock_file_content('example.js', content=js_content)
+                mock_file.sha = 'js_file_sha'  # Add SHA attribute
+                return mock_file
             elif path == 'README.md':
                 # Create a README file
                 readme_content = "# Test Repository\nThis is a test repository for RepoSage."
-                return create_mock_file_content('README.md', content=readme_content, sha='md_file_sha')
+                print(f"DEBUG: README file content: '{readme_content}'")
+                mock_file = create_mock_file_content('README.md', content=readme_content)
+                mock_file.sha = 'readme_file_sha'  # Add SHA attribute
+                return mock_file
+            elif path == 'CHANGELOG.md':
+                # Create a mock changelog file
+                changelog_content = """# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+"""
+                mock_file = create_mock_file_content('CHANGELOG.md', content=changelog_content)
+                mock_file.sha = 'changelog_file_sha'  # Add SHA attribute
+                return mock_file
             elif path == '':
                 # Return a list of files for the root directory
-                return [
-                    create_mock_file_content('example.py', content="def f(x, y):\n    return x * y", file_size=100),
-                    create_mock_file_content('example.js', content="function calc(a, b) {\n    return a * b;\n}", file_size=100),
-                    create_mock_file_content('README.md', content="# Test Repository\nThis is a test repository for RepoSage.", file_size=100)
-                ]
+                py_file = create_mock_file_content('example.py', content="def f(x, y):\n    z = x * y\n    return z", size=100)
+                py_file.sha = 'python_file_sha'
+                
+                js_file = create_mock_file_content('example.js', content="function calc(a, b) {\n    return a * b;\n}\n\nlet result = 0;\nresult = calc(5, 10);\nconsole.log(result);", size=100)
+                js_file.sha = 'js_file_sha'
+                
+                readme_file = create_mock_file_content('README.md', content="# Test Repository\nThis is a test repository for RepoSage.", size=100)
+                readme_file.sha = 'readme_file_sha'
+                
+                changelog_file = create_mock_file_content('CHANGELOG.md', content="# Changelog\n\nAll notable changes to this project will be documented in this file.", size=100)
+                changelog_file.sha = 'changelog_file_sha'
+                
+                return [py_file, js_file, readme_file, changelog_file]
             
             return None
         
         mock_repo.get_contents.side_effect = mock_get_contents
         
-        # Run the bot with sequential mode for tests
-        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
-        bot.run()
+        # Store the original update_file calls to track
+        update_file_calls = []
+
+        # Add debug tracking for update_file calls using side_effect
+        def debug_update_file(*args, **kwargs):
+            print(f"DEBUG: update_file called with args: {args}, kwargs: {kwargs}")
+            update_file_calls.append((args, kwargs))
+            # Return a default value for the mock
+            return (None, None)
+            
+        # Set the side effect while preserving the mock
+        mock_repo.update_file.side_effect = debug_update_file
         
-        # Verify API calls - should be 3 calls (one for each file)
-        self.assertEqual(mock_post.call_count, 3)
+        # Run the bot with sequential mode for tests and with PR mode (not direct commit)
+        bot = RepoSage(self.github_token, self.repo_name, self.openrouter_api_key, self.model, self.base_branch, use_parallel=False)
+        
+        # Override create_individual_pull_requests to force a second update for each file
+        original_create_prs = bot.create_individual_pull_requests
+        
+        def mock_create_individual_prs(changes_list):
+            print("DEBUG: Calling mock create_individual_pull_requests")
+            # For each file in changes_list, call update_file again to simulate PR creation
+            for file_changes in changes_list:
+                file_path = file_changes['file_path']
+                print(f"DEBUG: Creating individual PR for {file_path}")
+                # Get the file content to update
+                file_content = mock_repo.get_contents(file_path)
+                # Update the file again
+                mock_repo.update_file(
+                    file_path,
+                    f"Individual PR update for {file_path}",
+                    file_changes['content'],
+                    file_content.sha,
+                    branch=f"{bot.branch_name}-{file_path}"
+                )
+            return ["https://github.com/user/repo/pull/1", "https://github.com/user/repo/pull/2"]
+        
+        # Replace the method with our mock
+        bot.create_individual_pull_requests = mock_create_individual_prs
+        
+        # Set the bot to use PR mode (not direct commit)
+        bot.run(direct_commit=False)
+        
+        # Verify API calls - should be 4 calls (one for each file, including changelog)
+        self.assertEqual(mock_post.call_count, 4)
         
         # Verify branch creation - one main branch and one for each file with changes (2 files have changes)
         # The first call is for the main branch, and the rest are for individual file branches

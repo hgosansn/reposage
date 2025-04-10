@@ -168,60 +168,61 @@ IMPORTANT GUIDELINES:
             
             # Extract JSON from the response
             analysis_text = response['choices'][0]['message']['content']
-
-            # For debugging purposes only - don't log the entire response in production
-            # logger.info(f"Analysis text: {analysis_text}")
             logger.info(f"Received analysis response for {file_path}")
             
-            # More robust JSON extraction
-            # First try to extract JSON from code blocks
-            json_match = re.search(r'```(?:json)?\s*(.+?)\s*```', analysis_text, re.DOTALL)
-            if json_match:
-                try:
-                    analysis_json = json.loads(json_match.group(1))
-                    return {
-                        'file_path': file_path,
-                        'analysis': analysis_json
-                    }
-                except json.JSONDecodeError:
-                    logger.warning(f"Found code block but couldn't parse JSON for {file_path}")
-            
-            # Try to find any JSON-like structure in the response
-            json_match = re.search(r'(\{\s*"analysis".*?\}\s*$)', analysis_text, re.DOTALL)
-            if json_match:
-                try:
-                    analysis_json = json.loads(json_match.group(1))
-                    return {
-                        'file_path': file_path,
-                        'analysis': analysis_json
-                    }
-                except json.JSONDecodeError:
-                    logger.warning(f"Found JSON-like structure but couldn't parse for {file_path}")
-            
-            # Fallback: try to parse the entire response as JSON
+            # Try to parse the response directly first
             try:
                 analysis_json = json.loads(analysis_text)
-                return {
-                    'file_path': file_path,
-                    'analysis': analysis_json
-                }
+                if isinstance(analysis_json, dict) and 'analysis' in analysis_json:
+                    return {
+                        'file_path': file_path,
+                        'analysis': analysis_json
+                    }
             except json.JSONDecodeError:
-                logger.warning(f"Could not parse JSON from response for {file_path}")
-                
-                # Last resort: try to extract any valid JSON object from the text
+                pass
+            
+            # Try to extract JSON from code blocks
+            json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', analysis_text)
+            if json_match:
                 try:
-                    # Find anything that looks like a JSON object
-                    potential_json = re.search(r'(\{.*\})', analysis_text, re.DOTALL)
-                    if potential_json:
-                        analysis_json = json.loads(potential_json.group(1))
+                    analysis_json = json.loads(json_match.group(1))
+                    if isinstance(analysis_json, dict) and 'analysis' in analysis_json:
                         return {
                             'file_path': file_path,
                             'analysis': analysis_json
                         }
-                except Exception:
-                    pass
-                
-                return None
+                except json.JSONDecodeError:
+                    logger.warning(f"Found code block but couldn't parse JSON for {file_path}")
+            
+            # Try to find any JSON-like structure in the response
+            json_match = re.search(r'(\{\s*"analysis"[\s\S]*?\}\s*$)', analysis_text)
+            if json_match:
+                try:
+                    analysis_json = json.loads(json_match.group(1))
+                    if isinstance(analysis_json, dict) and 'analysis' in analysis_json:
+                        return {
+                            'file_path': file_path,
+                            'analysis': analysis_json
+                        }
+                except json.JSONDecodeError:
+                    logger.warning(f"Found JSON-like structure but couldn't parse for {file_path}")
+            
+            # Last resort: try to extract any valid JSON object from the text
+            try:
+                # Find anything that looks like a JSON object with "analysis" key
+                potential_json = re.search(r'(\{\s*"analysis"[\s\S]*?\})', analysis_text)
+                if potential_json:
+                    analysis_json = json.loads(potential_json.group(1))
+                    if isinstance(analysis_json, dict) and 'analysis' in analysis_json:
+                        return {
+                            'file_path': file_path,
+                            'analysis': analysis_json
+                        }
+            except Exception:
+                pass
+            
+            logger.warning(f"Could not parse JSON from response for {file_path}")
+            return None
             
         except Exception as e:
             logger.error(f"Error analyzing file {file_path}: {str(e)}")
