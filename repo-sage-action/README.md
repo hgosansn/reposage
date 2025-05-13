@@ -1,6 +1,11 @@
 # RepoSage GitHub Action
 
+
+[Concept Work In Progress]
+
 An AI-driven bot that analyzes a repository and suggests improvements based on AI and RAG (Retrieval-Augmented Generation).
+
+
 
 ## Overview
 
